@@ -1,0 +1,56 @@
+# A made-up robot for the tests: one joint and a halt service. It shows that
+# voicebridge knows nothing of StepIt Macro.
+robot:
+  name: Test Arm
+  description: A test robot with one joint.
+
+rosbridge: ws://localhost:9090
+
+confirmation:
+  timeout_s: 10
+  prompt: Say yes to confirm.
+  confirm: [yes, ok, go ahead]
+  decline: [no, cancel]
+  stop: [stop, halt]
+  fillers: [please]
+  stop_command: halt
+
+calls:
+  move:
+    action: /arm/move
+    type: arm_msgs/action/Move
+    request: {joint: "{{ joint }}", angle: "{{ angle }}"}
+  halt:
+    service: /arm/halt
+    type: std_srvs/srv/Trigger
+    success: response.success
+    message: "{{ response.message }}"
+
+commands:
+  turn_joint:
+    description: Turns the joint.
+    parameters:
+      degrees: {type: number, min: 1, max: 90}
+      direction: [left, right]
+    say: Turning {{ degrees | plural('degree') }} {{ direction }}.
+    run:
+      move: {joint: base, angle: "{{ degrees if direction == 'left' else -degrees }}"}
+    done: Turned.
+    examples:
+      - turn left 10 degrees: {degrees: 10, direction: left}
+
+  halt:
+    description: Stops the arm.
+    say: Halting.
+    confirm: false
+    run:
+      halt: {}
+    done: Halted.
+
+  where:
+    description: Says where the joint is.
+    confirm: false
+    read:
+      state:
+        read_latched_topic: {topic: /arm/state, type: arm_msgs/msg/State}
+    say: The joint is at {{ reads.state.angle | plural('degree') }}.

@@ -1,0 +1,38 @@
+# The calls of standard ROS 2 interfaces, which every robot file can use by
+# name, as `run:` or `read:` of a command. A robot file can replace one by
+# declaring a call of the same name.
+#
+# The templates see the arguments the command gives; `success`, `message` and
+# `result` also see `response`, the answer of the service, the result of the
+# action or the message of the topic, and `status`, the GoalStatus of an
+# action: 4 succeeded, 5 canceled, 6 aborted.
+
+get_parameters:
+  description: Reads parameters of a node; the result maps each name to its value, None when not set.
+  service: "{{ node }}/get_parameters"
+  type: rcl_interfaces/srv/GetParameters
+  request: {names: "{{ names }}"}
+  result: "dict(zip(names, response['values'] | map('param_value')))"
+
+set_parameters:
+  description: Sets parameters of a node, given as a mapping of name to value; a value of None is left out.
+  service: "{{ node }}/set_parameters"
+  type: rcl_interfaces/srv/SetParameters
+  request: {parameters: "{{ parameters | ros_parameters }}"}
+  success: "response.results | rejectattr('successful') | list | length == 0"
+  message: "{{ response.results | rejectattr('successful') | map(attribute='reason') | join('; ') }}"
+
+trigger:
+  description: Calls a std_srvs/srv/Trigger service.
+  service: "{{ service }}"
+  type: std_srvs/srv/Trigger
+  success: "response.success"
+  message: "{{ response.message }}"
+
+read_latched_topic:
+  description: The last message of a latched topic (transient local), e.g. a status.
+  topic: "{{ topic }}"
+  type: "{{ type }}"
+  qos: {reliability: reliable, durability: transient_local, history: keep_last, depth: 1}
+  result: "response"
+  timeout_s: 3.0

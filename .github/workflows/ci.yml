@@ -1,0 +1,18 @@
+# Builds the image of docker/Dockerfile and runs bin/test.sh in it: the style,
+# every robot file with all its examples, and the tests, as ./docker/dock.sh
+# test runs them on a computer. No ROS, no speech server and no LLM: the tests
+# use fakes of all three.
+
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -f docker/Dockerfile -t stepit-speech .
+      - name: Test
+        run: docker run --rm stepit-speech bin/test.sh
