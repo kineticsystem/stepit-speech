@@ -4,26 +4,26 @@
 
 ## Table of Contents <!-- omit in toc -->
 
-- [Introduction](#introduction)
-- [How It Works](#how-it-works)
-- [Prerequisites](#prerequisites)
-- [Install StepIt Speech](#install-stepit-speech)
-  - [Check out the Git Repository](#check-out-the-git-repository)
-  - [Build the Image](#build-the-image)
-- [Running the Application](#running-the-application)
-  - [Start the Rig](#start-the-rig)
-  - [Start the LLM](#start-the-llm)
-  - [Start the Bridge](#start-the-bridge)
-  - [Start the Speech-to-Speech Server](#start-the-speech-to-speech-server)
-  - [Start the Browser Demo](#start-the-browser-demo)
-  - [Talk to the Rig](#talk-to-the-rig)
-- [The Commands](#the-commands)
-- [Adding a Command](#adding-a-command)
-- [Trying Commands Without a Voice](#trying-commands-without-a-voice)
-- [Choosing the LLM](#choosing-the-llm)
-- [Using It With Another Robot](#using-it-with-another-robot)
-- [Tests](#tests)
-- [Troubleshooting](#troubleshooting)
+- [StepIt Speech](#stepit-speech)
+  - [Introduction](#introduction)
+  - [How It Works](#how-it-works)
+  - [Prerequisites](#prerequisites)
+  - [Install StepIt Speech](#install-stepit-speech)
+    - [Check out the Git Repository](#check-out-the-git-repository)
+    - [Build the Image](#build-the-image)
+  - [Running the Application](#running-the-application)
+    - [Start the Rig](#start-the-rig)
+    - [Start the LLM](#start-the-llm)
+    - [Start the Bridge](#start-the-bridge)
+    - [Start the Speech-to-Speech Server](#start-the-speech-to-speech-server)
+    - [Start the Browser Demo](#start-the-browser-demo)
+    - [Talk to the Rig](#talk-to-the-rig)
+  - [The Commands](#the-commands)
+  - [Adding a Command](#adding-a-command)
+  - [Trying Commands Without a Voice](#trying-commands-without-a-voice)
+  - [Using It With Another Robot](#using-it-with-another-robot)
+  - [Tests](#tests)
+  - [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -127,8 +127,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is built and why.
 ## Prerequisites
 
 - Ubuntu 24.04 and [Docker Engine](https://docs.docker.com/engine/install/ubuntu/).
-- An NVIDIA GPU for the speech server and the LLM. On our RTX 4090, 24 GB, the speech server takes about 5.3 GB and Bonsai 2 27B about 8.2 GB: 14.5 GB together.
-- An OpenAI-compatible LLM server that **enforces a JSON schema**, e.g. [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server`: see [Choosing the LLM](#choosing-the-llm).
+- An NVIDIA GPU with 16 GB VRAM for the speech server and the tool calling LLM. The speech server takes about 5.3 GB and Bonsai 2 27B about 8.2 GB: 14.5 GB together.
+- An OpenAI-compatible LLM server that **enforces a JSON schema**, e.g. [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server`.
 - A robot with rosbridge. For StepIt Macro, the rig of [stepit-macro](https://github.com/kineticsystem/stepit-macro), which runs with fake motors, a fake camera and a fake Freezer by default: no hardware is needed to try it.
 
 The tests need none of these: they run in the image, with fakes of the robot, rosbridge, the LLM and the speech server.
@@ -303,20 +303,6 @@ Three tools of the image try a robot file without speaking, in `./docker/dock.sh
 - `voicebridge run robots/stepit-macro/robot.yaml rotate_stage degrees=10 direction=clockwise` prepares one command, prints its read-back and its request, asks "Run it? [y/N]" and runs it on the rig.
 - `voicebridge eval robots/stepit-macro/robot.yaml` asks the LLM to understand every example, and scores it; `--say "turn the table 20 degrees"` tries a phrase of our own. It asks through the bridge's LLM proxy, `http://localhost:8767/v1`, as the bridge does, so the bridge must be running; `--model` names the model, `stepit-macro-bonsai` by default.
 
-## Choosing the LLM
-
-The bridge needs an LLM server that enforces a JSON schema (`response_format` of type `json_schema`): with it, the model can only answer with a command of the robot or a reply. Forcing a tool call (`tool_choice: required`) is not enough: llama.cpp leaves it unenforced with the chat template of Qwen3.8, and the model then answers "I'll switch the lights on for you" and calls nothing.
-
-We measured three on our RTX 4090, each with `voicebridge eval` (the 35 examples of StepIt Macro) and with the replay of a voice session in which the LLM had pretended several times:
-
-| llama-swap entry | Engine and model | GPU, with the voice | Examples | Replay |
-|---|---|---|---|---|
-| `stepit-macro-bonsai` | llama.cpp b11840, Bonsai 2 27B Q2_0, 7.6 GB | 14.5 GB | 35 of 35 | 10 of 10 |
-| `stepit-macro` | llama.cpp (TurboQuant), Qwen3.8-27B UD-Q4_K_XL, 17.6 GB | 23.7 GB | 35 of 35 | 10 of 10 |
-| `azllm-voice` | azllm (tqserve), Qwen3.8-27B TQ_L | 23.0 GB | not usable | not usable |
-
-azllm ignores both the JSON schema and `tool_choice: required`, so its model answers commands in words. Bonsai is as accurate as Qwen here, answers as fast, about 0.5 seconds, and leaves 10 GB of the GPU free, which keeps the voice from running out of memory.
-
 ## Using It With Another Robot
 
 Write a robot file for it: its `rosbridge` address, its `calls`, how its commands reach it, and its `commands`. The calls of standard ROS 2 interfaces, `get_parameters`, `set_parameters`, `trigger` and `read_latched_topic`, come with voicebridge, in [`src/voicebridge/calls.yaml`](src/voicebridge/calls.yaml). Then start the bridge with it:
@@ -343,7 +329,7 @@ They check the style with ruff, prepare every example of every robot file, and r
 
 **The voice says "There is no command waiting for confirmation, so nothing was done."** The bridge heard a yes, but no command was waiting: say the command itself, and answer its read-back. The speech-to-text can also mishear a word: "confirm" was once heard as "Koncern", which cancels the command. Say "yes".
 
-**The voice says "Sorry, I did not get that as a command. Please say it again."** The LLM answered in words as if the robot were acting, twice. With a server that enforces the JSON schema, the second answer is always a command: the LLM server ignores the schema, see [Choosing the LLM](#choosing-the-llm).
+**The voice says "Sorry, I did not get that as a command. Please say it again."** The LLM answered in words as if the robot were acting, twice. With a server that enforces the JSON schema, the second answer is always a command: this LLM server ignores the schema.
 
 **The voice says "I could not read the command back exactly, so I cancelled it."** The speech server reached the LLM directly, not through the bridge's proxy, and the LLM read the command back in its own words: nothing moved. Point `--responses_api_base_url` at `http://127.0.0.1:8767/v1`.
 
