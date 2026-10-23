@@ -1,43 +1,46 @@
-# StepIt Speech2Speech
+# StepIt Speech
 
-[![CI](https://github.com/kineticsystem/stepit-speech2speech/actions/workflows/ci.yml/badge.svg)](https://github.com/kineticsystem/stepit-speech2speech/actions/workflows/ci.yml)
+[![CI](https://github.com/kineticsystem/stepit-speech/actions/workflows/ci.yml/badge.svg)](https://github.com/kineticsystem/stepit-speech/actions/workflows/ci.yml)
 
 ## Table of Contents <!-- omit in toc -->
 
 - [Introduction](#introduction)
 - [How It Works](#how-it-works)
 - [Prerequisites](#prerequisites)
-- [Install StepIt Speech2Speech](#install-stepit-speech2speech)
+- [Install StepIt Speech](#install-stepit-speech)
   - [Check out the Git Repository](#check-out-the-git-repository)
   - [Build the Image](#build-the-image)
 - [Running the Application](#running-the-application)
   - [Start the Rig](#start-the-rig)
   - [Start the LLM](#start-the-llm)
-  - [Start the Speech-to-Speech Server](#start-the-speech-to-speech-server)
   - [Start the Bridge](#start-the-bridge)
+  - [Start the Speech-to-Speech Server](#start-the-speech-to-speech-server)
   - [Start the Browser Demo](#start-the-browser-demo)
   - [Talk to the Rig](#talk-to-the-rig)
 - [The Commands](#the-commands)
 - [Adding a Command](#adding-a-command)
 - [Trying Commands Without a Voice](#trying-commands-without-a-voice)
+- [Choosing the LLM](#choosing-the-llm)
 - [Using It With Another Robot](#using-it-with-another-robot)
 - [Tests](#tests)
 - [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
-StepIt Speech2Speech drives a ROS 2 robot by voice. We say "rotate the rig 10 degrees left"; the robot answers "Rotating the stage 10 degrees counter-clockwise. Say yes to confirm."; we say "yes"; and the stage turns.
+StepIt Speech drives a ROS 2 robot by voice. We say "move the camera 2 millimetres closer"; the robot answers "Moving the camera 2 millimetres closer. Confirm?"; we say "yes"; and the camera moves.
 
 It is built on [Hugging Face Speech-to-Speech](https://github.com/huggingface/speech-to-speech), which listens, transcribes, asks an LLM and speaks the answer, and on [rosbridge](https://github.com/RobotWebTools/rosbridge_suite), which lets a program reach ROS 2 over a WebSocket. Its first robot is [StepIt Macro](https://github.com/kineticsystem/stepit-macro), the focus stacking rig, but it knows nothing of it: everything about a robot is in one YAML file, its **robot file**.
 
 - **Every command is read back and confirmed.** Nothing moves until we have heard what will run and said yes.
+- **The read-back is written by the program, not by the LLM.** It comes from the robot file, word for word, the same every time.
+- **The LLM cannot pretend.** It must answer every turn with a command or a short reply; a reply that sounds like the robot acting is refused.
 - **Stop works without the LLM.** Saying "stop" anywhere in a sentence stops the robot at once.
 - **A command is a few lines of YAML.** A description, its parameters, the sentence to read back and what to run.
 - **No ROS is needed** to run the bridge or its tests: it speaks to the robot through rosbridge.
 
 ## How It Works
 
-The bridge sits between the browser page of Speech-to-Speech and its server. The page connects to the bridge instead of the server, and the bridge passes everything through, except the robot's commands:
+The bridge, `voicebridge`, sits twice in the path of Speech-to-Speech. The browser page connects to the bridge instead of the speech server, and the speech server asks its LLM through the bridge's LLM proxy:
 
 ```mermaid
 ---
@@ -98,36 +101,45 @@ flowchart TB
     Browser["Browser demo<br/>microphone and speaker, port 7860"]
     Bridge["voicebridge<br/>port 8766"]
     Speech["Speech-to-Speech server<br/>port 8765"]
-    LLM["LLM<br/>Qwen3.8-27B on llama-swap, port 8085"]
+    Proxy["voicebridge LLM proxy<br/>port 8767"]
+    LLM["LLM<br/>Bonsai 2 27B on llama.cpp, llama-swap port 8085"]
     Rosbridge["rosbridge<br/>port 9090"]
     Robot["The robot<br/>StepIt Commander, the drivers"]
 
     Browser -- "audio and events" --> Bridge
     Bridge -- "the same, plus the robot's tools" --> Speech
-    Speech -- "text" --> LLM
+    Speech -- "text" --> Proxy
+    Proxy -- "one JSON decision" --> LLM
     Bridge -- "confirmed commands" --> Rosbridge
     Rosbridge --> Robot
 
     classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
 ```
 
-The LLM only proposes a command. Checking it, reading it back, hearing the yes and running it are done by the bridge, with fixed rules. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is built and why.
+The LLM only proposes a command. Checking it, reading it back, hearing the yes and running it are done by the bridge, with fixed rules:
+
+- **The bridge speaks its own sentences.** The speech server sends every reply through its LLM. When the bridge has a sentence to say, the read-back, the outcome or the greeting, the proxy answers with that sentence itself and never asks the model.
+- **The LLM answers in one JSON object.** The proxy asks for `{"command": ..., "arguments": {...}}` or `{"reply": "..."}`, and the LLM server enforces it with a JSON schema: the model cannot answer a command in loose words. A command becomes the tool call the speech server expects.
+- **Yes, no and stop never reach the LLM.** The bridge recognises them with fixed word lists and answers them itself.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is built and why.
 
 ## Prerequisites
 
 - Ubuntu 24.04 and [Docker Engine](https://docs.docker.com/engine/install/ubuntu/).
-- An NVIDIA GPU for the speech server and the LLM. On our RTX 4090, 24 GB, the speech-to-text, Qwen3.8-27B with an 8K context and the Qwen3-TTS voice fit together, with 1.5 GB to spare: see [Start the LLM](#start-the-llm).
+- An NVIDIA GPU for the speech server and the LLM. On our RTX 4090, 24 GB, the speech server takes about 5.3 GB and Bonsai 2 27B about 8.2 GB: 14.5 GB together.
+- An OpenAI-compatible LLM server that **enforces a JSON schema**, e.g. [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server`: see [Choosing the LLM](#choosing-the-llm).
 - A robot with rosbridge. For StepIt Macro, the rig of [stepit-macro](https://github.com/kineticsystem/stepit-macro), which runs with fake motors, a fake camera and a fake Freezer by default: no hardware is needed to try it.
 
-The tests need none of these: they run in the image, with fakes of the robot, rosbridge and the speech server.
+The tests need none of these: they run in the image, with fakes of the robot, rosbridge, the LLM and the speech server.
 
-## Install StepIt Speech2Speech
+## Install StepIt Speech
 
 ### Check out the Git Repository
 
 ```bash
-git clone git@github.com:kineticsystem/stepit-speech2speech.git
-cd stepit-speech2speech
+git clone git@github.com:kineticsystem/stepit-speech.git
+cd stepit-speech
 ```
 
 ### Build the Image
@@ -154,45 +166,58 @@ Its rosbridge listens on port 9090, the address in [`robots/stepit-macro/robot.y
 
 ### Start the LLM
 
-Any OpenAI-compatible server works. On our computer, llama-swap serves Qwen3.8-27B on port 8085 as `azllm-voice`: text only, an 8K context, which voice turns never exceed, and 4.75 GB of the GPU left free for the voice models. Its entry in `qwen-4090-bench/scripts/llama-swap.yaml`:
+On our computer, [llama-swap](https://github.com/mostlygeek/llama-swap) serves the models on port 8085 and starts the one a request names. The voice uses `stepit-macro-bonsai`: Bonsai 2 27B, PrismML's ternary build of Qwen3.8-27B, on upstream llama.cpp b11555 or newer, with an 8K context, which voice turns never exceed, and thinking off, so that it answers in about half a second. Its entry in `qwen-4090-bench/scripts/llama-swap.yaml`:
 
 ```yaml
-azllm-voice:
-  cmd: ${serve}/azllm.sh --no-vision --ctx 8192 --free 4864 --port ${PORT} -- -ub 512 --gemm-rows 2048
+stepit-macro-bonsai:
+  cmd: ${serve}/bonsai.sh --ctx 8192 --port ${PORT} -- --chat-template-kwargs '{"enable_thinking":false}'
 ```
 
-The speech server loads the LLM while it starts, before its voice: an LLM that takes the whole GPU, e.g. `azllm-text` with its 148K context, leaves no room for the voice, which then fails with `cudaMalloc failed: out of memory`.
+`bonsai.sh` runs `llama-server` on the model file `Ternary-Bonsai-2-27B-Q2_0.gguf`, 7.6 GB, from [prism-ml/Ternary-Bonsai-2-27B-gguf-dev](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf-dev), with `--jinja` and the sampling of the model card.
 
-### Start the Speech-to-Speech Server
+Nothing needs to be loaded first: llama-swap starts the model on the first request, in about 7 seconds, and unloads it after 30 idle minutes.
 
-In the speech-to-speech repository, pointing it at the LLM through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU:
-
-```bash
-uv run speech-to-speech serve \
-  --llm_backend chat-completions \
-  --responses_api_base_url "http://127.0.0.1:8085/v1" \
-  --responses_api_api_key "" \
-  --model_name azllm-voice \
-  --qwen3_tts_ggml_quantization Q8_0
-```
-
-It takes about a minute to load speech-to-text, the LLM and the voice.
-
-It listens on `ws://127.0.0.1:8765/v1/realtime`.
+> [!NOTE]
+> llama-swap and `bonsai.sh` live in another repository, `qwen-4090-bench`. [`TODO.md`](TODO.md) plans to build llama.cpp and download Bonsai inside this project, so that it runs on its own.
 
 ### Start the Bridge
 
 ```bash
-./docker/dock.sh serve
+VOICEBRIDGE_LLM_MODEL=stepit-macro-bonsai ./docker/dock.sh serve
 ```
 
-It listens on port 8766, forwards to the speech server on `ws://127.0.0.1:8765/v1/realtime`, and reaches the rig at `ws://localhost:9090`. The environment variables `VOICEBRIDGE_LISTEN`, `VOICEBRIDGE_UPSTREAM` and `VOICEBRIDGE_ROSBRIDGE` change these, e.g. for a rig on the Raspberry Pi:
+It listens for the browser on port 8766 and forwards to the speech server on `ws://127.0.0.1:8765/v1/realtime`; it listens for the speech server's LLM requests on port 8767 and forwards them to the LLM on `http://localhost:8085/v1`; and it reaches the rig at `ws://localhost:9090`. These environment variables change them:
+
+| Variable | Default | What it is |
+|---|---|---|
+| `VOICEBRIDGE_LISTEN` | `0.0.0.0:8766` | Where the browser connects. |
+| `VOICEBRIDGE_UPSTREAM` | `ws://127.0.0.1:8765/v1/realtime` | The speech server. |
+| `VOICEBRIDGE_LLM_LISTEN` | `127.0.0.1:8767` | The LLM proxy, which the speech server uses as its LLM. |
+| `VOICEBRIDGE_LLM_URL` | `http://localhost:8085/v1` | The LLM behind the proxy. |
+| `VOICEBRIDGE_LLM_MODEL` | none | The model every request asks for, whatever the speech server names. |
+| `VOICEBRIDGE_ROSBRIDGE` | the robot file's | rosbridge, e.g. `ws://<rig-address>:9090` for a rig on the Raspberry Pi. |
+
+`VOICEBRIDGE_LLM_MODEL` matters with llama-swap: a request that names another model, e.g. a summary the speech server asks for on its own, would make llama-swap unload the voice's model and load that one.
+
+At start, it logs the robot, its commands and the proxy: `StepIt Macro: 15 commands, rosbridge at ws://localhost:9090` and `LLM proxy on http://127.0.0.1:8767/v1, forwarding to http://localhost:8085/v1`.
+
+### Start the Speech-to-Speech Server
+
+In the speech-to-speech repository, pointing it at the bridge's LLM proxy through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU:
 
 ```bash
-VOICEBRIDGE_ROSBRIDGE=ws://<rig-address>:9090 ./docker/dock.sh serve
+uv run speech-to-speech serve \
+  --llm_backend chat-completions \
+  --responses_api_base_url "http://127.0.0.1:8767/v1" \
+  --responses_api_api_key "" \
+  --model_name stepit-macro-bonsai \
+  --qwen3_tts_ggml_quantization Q8_0
 ```
 
-At start, it logs the robot and its commands: `StepIt Macro: 15 commands, rosbridge at ws://localhost:9090`.
+It takes about a minute to load speech-to-text and the voice. It listens on `ws://127.0.0.1:8765/v1/realtime`.
+
+> [!IMPORTANT]
+> The speech server must reach its LLM through the bridge, port 8767, never directly, port 8085: otherwise the LLM writes the read-back in its own words, and the bridge refuses to arm a command it did not hear word for word.
 
 ### Start the Browser Demo
 
@@ -210,13 +235,13 @@ uv run uvicorn --app-dir demo server:app --port 7860
 
 ### Talk to the Rig
 
-Open <http://localhost:7860>, press the button, and speak:
+Open <http://localhost:7860>, press the button and allow the microphone. The voice says "Ready.", the `greeting` of the robot file. Then:
 
-1. "Rotate the rig 10 degrees left."
-2. The voice answers: "Rotating the stage 10 degrees counter-clockwise. Say yes to confirm."
-3. "Yes." The stage turns, and the voice says "The stage turned 10 degrees counter-clockwise."
+1. "Move the camera 2 millimetres closer."
+2. The voice answers: "Moving the camera 2 millimetres closer. Confirm?"
+3. "Yes." The rail moves, and the voice says "The camera moved 2 millimetres closer."
 
-Say "no", or anything else, to cancel; say "stop" at any time to stop the rig.
+Say "no", or anything else, to cancel; say "stop" at any time to stop the rig. When a value is missing, e.g. "move the camera closer", the voice asks for it: "How many millimetres closer?". Watch the rig in StepIt UI, <http://localhost:8070>.
 
 ## The Commands
 
@@ -276,7 +301,21 @@ Three tools of the image try a robot file without speaking, in `./docker/dock.sh
 
 - `voicebridge check robots/stepit-macro/robot.yaml` prepares every example, without a robot.
 - `voicebridge run robots/stepit-macro/robot.yaml rotate_stage degrees=10 direction=clockwise` prepares one command, prints its read-back and its request, asks "Run it? [y/N]" and runs it on the rig.
-- `voicebridge eval robots/stepit-macro/robot.yaml` asks the LLM to understand every example, and scores it; `--say "turn the table 20 degrees"` tries a phrase of our own. It needs the LLM, on `http://localhost:8085/v1` by default.
+- `voicebridge eval robots/stepit-macro/robot.yaml` asks the LLM to understand every example, and scores it; `--say "turn the table 20 degrees"` tries a phrase of our own. It asks through the bridge's LLM proxy, `http://localhost:8767/v1`, as the bridge does, so the bridge must be running; `--model` names the model, `stepit-macro-bonsai` by default.
+
+## Choosing the LLM
+
+The bridge needs an LLM server that enforces a JSON schema (`response_format` of type `json_schema`): with it, the model can only answer with a command of the robot or a reply. Forcing a tool call (`tool_choice: required`) is not enough: llama.cpp leaves it unenforced with the chat template of Qwen3.8, and the model then answers "I'll switch the lights on for you" and calls nothing.
+
+We measured three on our RTX 4090, each with `voicebridge eval` (the 35 examples of StepIt Macro) and with the replay of a voice session in which the LLM had pretended several times:
+
+| llama-swap entry | Engine and model | GPU, with the voice | Examples | Replay |
+|---|---|---|---|---|
+| `stepit-macro-bonsai` | llama.cpp b11840, Bonsai 2 27B Q2_0, 7.6 GB | 14.5 GB | 35 of 35 | 10 of 10 |
+| `stepit-macro` | llama.cpp (TurboQuant), Qwen3.8-27B UD-Q4_K_XL, 17.6 GB | 23.7 GB | 35 of 35 | 10 of 10 |
+| `azllm-voice` | azllm (tqserve), Qwen3.8-27B TQ_L | 23.0 GB | not usable | not usable |
+
+azllm ignores both the JSON schema and `tool_choice: required`, so its model answers commands in words. Bonsai is as accurate as Qwen here, answers as fast, about 0.5 seconds, and leaves 10 GB of the GPU free, which keeps the voice from running out of memory.
 
 ## Using It With Another Robot
 
@@ -296,14 +335,18 @@ Run the checks of CI, in the image:
 ./docker/dock.sh test
 ```
 
-They check the style with ruff, prepare every example of every robot file, and run the tests, which cover the confirmation rules, the robot file, rosbridge and the whole bridge over real WebSockets, with fakes of the speech server and of rosbridge. See [Tests](docs/ARCHITECTURE.md#tests) for what each covers and what is checked by hand.
+They check the style with ruff, prepare every example of every robot file, and run the tests, which cover the confirmation rules, the robot file, rosbridge and the whole bridge over real WebSockets, with fakes of the speech server, the LLM and rosbridge. See [Tests](docs/ARCHITECTURE.md#tests) for what each covers and what is checked by hand.
 
 ## Troubleshooting
 
 **The voice says "That did not work: cannot reach rosbridge at ws://localhost:9090".** The rig is not running, or its rosbridge is elsewhere: start it, or set `VOICEBRIDGE_ROSBRIDGE`.
 
-**The voice says "I could not read the command back exactly, so I cancelled it."** The LLM did not say the read-back word for word, so the bridge cancelled the command: nothing moved. Say it again. If it happens often, the model is too small to repeat a sentence reliably.
+**The voice says "There is no command waiting for confirmation, so nothing was done."** The bridge heard a yes, but no command was waiting: say the command itself, and answer its read-back. The speech-to-text can also mishear a word: "confirm" was once heard as "Koncern", which cancels the command. Say "yes".
 
-**The speech server stops with `cudaMalloc failed: out of memory`.** The LLM took the GPU before the voice could load: use an LLM entry that leaves room, as `azllm-voice` does, see [Start the LLM](#start-the-llm).
+**The voice says "Sorry, I did not get that as a command. Please say it again."** The LLM answered in words as if the robot were acting, twice. With a server that enforces the JSON schema, the second answer is always a command: the LLM server ignores the schema, see [Choosing the LLM](#choosing-the-llm).
+
+**The voice says "I could not read the command back exactly, so I cancelled it."** The speech server reached the LLM directly, not through the bridge's proxy, and the LLM read the command back in its own words: nothing moved. Point `--responses_api_base_url` at `http://127.0.0.1:8767/v1`.
+
+**The speech server stops with `cudaMalloc failed: out of memory`, or with `CUDA error: an unsupported value or parameter was passed to the function` in `ggml_cuda_op_mul_mat_cublas`.** The GPU is full: the voice could not allocate memory. Use an LLM that leaves room for it, e.g. `stepit-macro-bonsai`, and restart the speech server.
 
 **A yes does nothing.** The answer must be made only of the confirming words, e.g. "yes" or "yes, go ahead", within 20 seconds of the end of the read-back. "Yes, but faster" is not a yes: it cancels the command, and the LLM hears it as a new request.

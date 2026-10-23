@@ -1,5 +1,5 @@
 [project]
-name = "stepit-speech2speech"
+name = "stepit-speech"
 version = "0.1.0"
 description = "Drive a ROS 2 robot by voice: spoken commands, read back and confirmed, sent through rosbridge"
 readme = "README.md"
@@ -10,6 +10,7 @@ dependencies = [
     "websockets>=14",
     "PyYAML>=6",
     "Jinja2>=3.1",
+    "aiohttp>=3.9",
 ]
 
 [project.optional-dependencies]

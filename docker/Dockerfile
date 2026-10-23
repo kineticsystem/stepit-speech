@@ -1,4 +1,4 @@
-# The image of StepIt Speech2Speech: the bridge, its tests and its tools. It
+# The image of StepIt Speech: the bridge, its tests and its tools. It
 # needs no ROS: the bridge reaches the robot through rosbridge, over a
 # WebSocket. CI builds it and runs bin/test.sh in it; ./docker/dock.sh serve
 # runs the bridge in it.

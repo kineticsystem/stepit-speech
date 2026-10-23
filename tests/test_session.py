@@ -13,8 +13,18 @@ from conftest import FakeClock, FakeRobot
 
 from voicebridge.confirmation import Phase
 from voicebridge.prompt import AWAITING_CONFIRMATION
+from voicebridge.realtime import scripted_sentence
 from voicebridge.robot import Outcome
-from voicebridge.session import CANCELLED, ONE_AT_A_TIME, READ_BACK_FAILED, TOO_LATE, Session
+from voicebridge.session import (
+    CANCELLED,
+    MUTED_CALL,
+    NOTHING_TO_CONFIRM,
+    ONE_AT_A_TIME,
+    READ_BACK_FAILED,
+    SPOKE_OVER,
+    TOO_LATE,
+    Session,
+)
 
 READ_BACK = "Turning 10 degrees left. Say yes to confirm."
 
@@ -103,7 +113,7 @@ class Harness:
 
     def said(self) -> list[str]:
         """The sentences the bridge asked the voice to say exactly."""
-        return [event["response"]["instructions"].split("\n", 1)[1] for event in self.upstream
+        return [scripted_sentence(event["response"]["instructions"]) for event in self.upstream
                 if event.get("type") == "response.create" and "instructions" in event.get("response", {})]
 
     def outputs(self) -> list[str]:
@@ -239,9 +249,36 @@ async def test_an_interrupted_read_back_cancels_the_command(harness):
     assert harness.session.confirmation.phase is Phase.IDLE
 
 
-async def test_a_yes_with_no_command_pending_is_left_to_the_llm(harness):
+async def test_a_yes_with_no_command_pending_is_answered_by_the_bridge(harness):
+    # The LLM never gets to play along with a yes that confirms nothing.
     await harness.user_says("yes")
-    assert harness.count("response.cancel") == 0
+    assert harness.count("response.cancel") == 1
+    assert harness.said() == [NOTHING_TO_CONFIRM]
+    assert harness.robot.requests == []
+
+
+async def test_a_call_in_a_muted_reply_is_answered_and_not_run(harness):
+    await harness.user_says("yes")
+    # The server is already answering the yes itself, so it refuses the bridge's reply for now.
+    rid = await harness.llm_calls("turn_joint", {"degrees": 10, "direction": "left"})
+    await harness.server({"type": "error", "error": {"code": "conversation_already_has_active_response"}})
+    await harness.response_done(rid)
+    assert harness.outputs() == [MUTED_CALL]
+    assert harness.said() == [NOTHING_TO_CONFIRM, NOTHING_TO_CONFIRM]
+    assert harness.session.confirmation.phase is Phase.IDLE
+    assert harness.robot.requests == []
+    assert not [event for event in harness.browser if event.get("type") == "response.output_item.done"]
+
+
+async def test_a_yes_over_the_read_back_is_answered_by_the_bridge(harness):
+    rid = await harness.llm_calls("turn_joint", {"degrees": 10, "direction": "left"})
+    await harness.response_done(rid)
+    tag = harness.last("response.create")["response"]["metadata"]["voicebridge"]
+    reading = harness.new_id()
+    await harness.server({"type": "response.created", "response": {"id": reading, "metadata": {"voicebridge": tag}}})
+    await harness.user_says("yes")
+    await harness.response_done(reading, "cancelled")
+    assert harness.said()[-1] == SPOKE_OVER
     assert harness.robot.requests == []
 
 
@@ -385,3 +422,34 @@ async def test_closing_the_session_cancels_a_running_command(harness):
     assert harness.robot.targets == ["/arm/move"]
     await harness.session.close()
     assert harness.robot.cancelled
+
+
+# ── Greeting ───────────────────────────────────────────────────────────────────
+
+GREETING_PROMPT = {"type": "conversation.item.create", "item": {
+    "type": "message", "role": "user",
+    "content": [{"type": "input_text", "text": "Start the conversation now with a brief greeting."}]}}
+
+
+async def test_the_robot_greets_in_place_of_the_llm(stepit_macro):
+    harness = Harness(stepit_macro)
+    await harness.session.from_browser(GREETING_PROMPT)
+    await harness.session.from_browser({"type": "response.create"})
+    assert harness.said() == ["Ready."]
+    assert harness.count("response.create") == 1
+    assert harness.count("conversation.item.create") == 0
+
+
+async def test_a_typed_message_after_the_user_spoke_goes_to_the_llm(stepit_macro):
+    harness = Harness(stepit_macro)
+    await harness.user_says("hello")
+    await harness.session.from_browser(GREETING_PROMPT)
+    assert harness.count("conversation.item.create") == 1
+    assert harness.said() == []
+
+
+async def test_without_a_greeting_the_llm_greets(harness):
+    await harness.session.from_browser(GREETING_PROMPT)
+    await harness.session.from_browser({"type": "response.create"})
+    assert harness.count("conversation.item.create") == 1
+    assert harness.said() == []

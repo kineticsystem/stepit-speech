@@ -24,6 +24,7 @@ from typing import Any
 
 from voicebridge.catalogue import Catalogue, RobotFileError, load, read_yaml
 from voicebridge.docs import generate
+from voicebridge.llmproxy import Guard, LlmProxy
 from voicebridge.planner import Planner, Rejected
 from voicebridge.prompt import instructions
 from voicebridge.robot import RosbridgeRobot
@@ -43,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
                        help="the speech-to-speech server (default %(default)s)")
     serve.add_argument("--rosbridge", default=os.environ.get("VOICEBRIDGE_ROSBRIDGE"),
                        help="rosbridge, instead of the robot file's")
+    serve.add_argument("--llm-listen", default=os.environ.get("VOICEBRIDGE_LLM_LISTEN", "127.0.0.1:8767"),
+                       help="the LLM proxy, which the speech server must use as its LLM (default %(default)s)")
+    serve.add_argument("--llm", default=os.environ.get("VOICEBRIDGE_LLM_URL", "http://localhost:8085/v1"),
+                       help="the LLM behind the proxy, OpenAI-compatible (default %(default)s)")
+    serve.add_argument("--llm-model", default=os.environ.get("VOICEBRIDGE_LLM_MODEL"),
+                       help="the model to ask, instead of the one the speech server names")
 
     check = commands.add_parser("check", help="check a robot file and prepare its examples")
     check.add_argument("robot")
@@ -60,9 +67,9 @@ def main(argv: list[str] | None = None) -> int:
 
     evaluate = commands.add_parser("eval", help="score the LLM on the examples of a robot file")
     evaluate.add_argument("robot")
-    evaluate.add_argument("--llm", default=os.environ.get("VOICEBRIDGE_LLM_URL", "http://localhost:8085/v1"),
-                          help="an OpenAI-compatible endpoint (default %(default)s)")
-    evaluate.add_argument("--model", default=os.environ.get("VOICEBRIDGE_LLM_MODEL", "azllm-text"))
+    evaluate.add_argument("--llm", default="http://localhost:8767/v1",
+                          help="the bridge's LLM proxy, which asks the LLM as the bridge does (default %(default)s)")
+    evaluate.add_argument("--model", default=os.environ.get("VOICEBRIDGE_LLM_MODEL", "stepit-macro-bonsai"))
     evaluate.add_argument("--say", action="append", help="a phrase to try instead of the examples; repeatable")
     evaluate.add_argument("--think", action="store_true", help="let the model think first")
 
@@ -104,13 +111,18 @@ async def _serve(catalogue: Catalogue, args: argparse.Namespace) -> int:
     host, _, port = args.listen.rpartition(":")
     rosbridge = Rosbridge(args.rosbridge or catalogue.rosbridge_url)
     server = BridgeServer(catalogue, RosbridgeRobot(rosbridge), args.upstream, host or "0.0.0.0", int(port))
+    llm_host, _, llm_port = args.llm_listen.rpartition(":")
+    proxy = LlmProxy(args.llm, llm_host or "127.0.0.1", int(llm_port), Guard.of(catalogue),
+                     model=args.llm_model)
     logging.getLogger("voicebridge").info("%s: %d commands, rosbridge at %s", catalogue.name,
                                           len(catalogue.commands), rosbridge.url)
     try:
+        await proxy.start()
         await server.serve_forever()
     except asyncio.CancelledError:
         pass
     finally:
+        await proxy.stop()
         await rosbridge.close()
     return 0
 

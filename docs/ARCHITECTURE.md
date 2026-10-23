@@ -1,4 +1,4 @@
-# StepIt Speech2Speech Architecture
+# StepIt Speech Architecture
 
 ## Table of Contents <!-- omit in toc -->
 
@@ -20,17 +20,20 @@
   - [The Events It Reads](#the-events-it-reads)
   - [The Bridge's Own Replies](#the-bridges-own-replies)
   - [Muting the Server's Reply](#muting-the-servers-reply)
+- [The LLM Proxy](#the-llm-proxy)
+  - [One Decision per Turn](#one-decision-per-turn)
+  - [What the Model Never Sees](#what-the-model-never-sees)
 - [Talking to the Robot](#talking-to-the-robot)
 - [Threads and Time](#threads-and-time)
 - [Tests](#tests)
-- [How to Extend StepIt Speech2Speech](#how-to-extend-stepit-speech2speech)
+- [How to Extend StepIt Speech](#how-to-extend-stepit-speech)
 - [Design Decisions and Trade-offs](#design-decisions-and-trade-offs)
 
 ## Introduction
 
-This document explains how StepIt Speech2Speech is built, what each part is responsible for, and where to start when we want to change something. It assumes you have read the [README](../README.md). Its code is the Python package `voicebridge`, in `src/voicebridge`, about 2,100 lines with their docstrings; the robot it drives first is StepIt Macro, through [`robots/stepit-macro/robot.yaml`](../robots/stepit-macro/robot.yaml).
+This document explains how StepIt Speech is built, what each part is responsible for, and where to start when we want to change something. It assumes you have read the [README](../README.md). Its code is the Python package `voicebridge`, in `src/voicebridge`, about 3,200 lines with their docstrings; the robot it drives first is StepIt Macro, through [`robots/stepit-macro/robot.yaml`](../robots/stepit-macro/robot.yaml).
 
-It follows one idea: **the LLM proposes, the bridge decides**. The LLM is good at understanding "spin the turntable forty five degrees anticlockwise", and bad at being certain: it can mishear, guess or invent. So it is given one job only, turning words into a proposed command. Everything that decides whether the robot moves is plain code with fixed rules: the limits of each value, the sentence read back, the check that the voice said it, the words that mean yes, and stop.
+It follows one idea: **the LLM proposes, the bridge decides**. The LLM is good at understanding "spin the turntable forty five degrees anticlockwise", and bad at being certain: it can mishear, guess or invent. So it is given one job only, turning words into a proposed command. Everything that decides whether the robot moves is plain code with fixed rules: the limits of each value, the sentence read back, the words that mean yes, and stop. Even the LLM's answer has a fixed shape: one JSON object, a command or a short reply, which its server enforces.
 
 A waiter works the same way. We order in our own words; the waiter writes the order on a slip in the kitchen's words and reads it back to us; the kitchen cooks only once we said "yes, that's it". If we say anything else, the slip goes in the bin, and if we shout "stop!", everything stops, whatever is written on the slip.
 
@@ -97,7 +100,8 @@ flowchart TB
     Browser["Browser demo<br/>microphone and speaker"]
     Bridge["voicebridge<br/>port 8766"]
     Speech["Speech-to-Speech server, port 8765<br/>VAD: when we speak<br/>STT: speech to text<br/>TTS: text to speech"]
-    LLM["LLM<br/>Qwen3.8-27B, port 8085"]
+    Proxy["voicebridge LLM proxy<br/>port 8767"]
+    LLM["LLM<br/>Bonsai 2 27B on llama.cpp, port 8085"]
     Rosbridge["rosbridge<br/>port 9090"]
 
     subgraph Rig["StepIt Macro"]
@@ -107,8 +111,10 @@ flowchart TB
 
     Browser -- "audio, events" --> Bridge
     Bridge -- "audio, events, robot tools" --> Speech
-    Speech -- "transcript, tools" --> LLM
-    LLM -- "reply or tool call" --> Speech
+    Speech -- "transcript, tools" --> Proxy
+    Proxy -- "a JSON schema of the commands" --> LLM
+    LLM -- "one JSON decision" --> Proxy
+    Proxy -- "reply or tool call" --> Speech
     Bridge -- "confirmed commands" --> Rosbridge
     Rosbridge -- "actions" --> Commander
     Rosbridge -- "services, topics" --> Drivers
@@ -118,10 +124,14 @@ flowchart TB
 
 The speech server and the browser speak the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime): JSON events over a WebSocket, e.g. `session.update` from the browser, `response.created`, `conversation.item.input_audio_transcription.completed` (what we said) and `response.output_item.done` (a finished tool call) from the server. The bridge sits in the middle of that WebSocket. To the browser it looks like the server; to the server it looks like the browser. It passes almost every event through unchanged.
 
+The bridge also sits on the speech server's way to its LLM. The speech server asks an OpenAI-compatible `/v1/chat/completions` for every reply it speaks, and its address is the bridge's LLM proxy, which forwards to the real LLM. That is how the bridge makes the voice say its own sentences exactly, and how it keeps the LLM from answering a command in words: see [The LLM Proxy](#the-llm-proxy).
+
 | Name | Type | What it does |
 |---|---|---|
 | `ws://0.0.0.0:8766/v1/realtime` | WebSocket server | Where the browser connects, instead of the speech server. One session per browser. |
 | `ws://127.0.0.1:8765/v1/realtime` | WebSocket client | The speech server. The bridge opens one connection per browser, with the browser's own subprotocols. |
+| `http://127.0.0.1:8767/v1/chat/completions` | HTTP server | The LLM proxy, the speech server's LLM. Any other path passes through. |
+| `http://localhost:8085/v1` | HTTP client | The LLM, any OpenAI-compatible server that enforces a JSON schema, e.g. llama.cpp. |
 | `ws://localhost:9090` | WebSocket client | rosbridge, for every request to the robot. One connection for the whole bridge. |
 | `robots/<robot>/robot.yaml` | File | Everything about the robot: its commands, how they reach it, the words of yes, no and stop. |
 | `voicebridge serve`, `check`, `docs`, `run`, `eval` | Command line | The bridge, and the tools that try a robot file without a voice. |
@@ -130,12 +140,12 @@ The speech server and the browser speak the [OpenAI Realtime API](https://platfo
 
 In plain words, this is what happens when we say "rotate the rig 10 degrees left":
 
-1. The speech server hears us, transcribes us, and gives the text to the LLM, with the robot's commands as tools: the bridge added them to the session when the browser connected.
-2. The LLM calls the tool `rotate_stage` with `{degrees: 10, direction: counter-clockwise}`.
+1. The speech server hears us, transcribes us, and gives the text to its LLM, with the robot's commands as tools: the bridge added them to the session when the browser connected. Its LLM is the bridge's proxy, which asks the real LLM for one JSON object: a command, or a reply.
+2. The LLM answers `{"command": "rotate_stage", "arguments": {"degrees": 10, "direction": "counter-clockwise"}}`, and the proxy hands it to the speech server as a call of the tool `rotate_stage`.
 3. The bridge catches the call, so the browser never sees it, and checks the values: 10 is between 0.1 and 360, counter-clockwise is one of the two directions.
-4. From the same values, it writes the sentence to read back, "Rotating the stage 10 degrees counter-clockwise. Say yes to confirm.", and the request it will send, the objective `RotateStageBy` with `{deg: -10.0}`.
-5. It asks the voice to say that sentence word for word, and compares what the voice said with it. Only when they are the same is the command **armed**: ready, waiting for a yes, for 20 seconds.
-6. We say "yes". The bridge reads our transcript itself and finds only confirming words. The LLM's own answer to our "yes" is muted and cancelled.
+4. From the same values, it writes the sentence to read back, "Rotating the stage 10 degrees counter-clockwise. Confirm?", and the request it will send, the objective `RotateStageBy` with `{deg: -10.0}`.
+5. It asks the speech server to say that sentence. The speech server asks its LLM for the words, and the proxy answers with the sentence itself, without the model. The bridge still compares what the voice said with the sentence: only when they are the same is the command **armed**, ready, waiting for a yes, for 20 seconds.
+6. We say "yes". The bridge reads our transcript itself and finds only confirming words. The LLM never hears the yes: the proxy answers that turn with nothing, and the bridge cancels the server's reply to it.
 7. The bridge sends the goal to the commander through rosbridge and waits for its end.
 8. It asks the voice to say the outcome: "The stage turned 10 degrees counter-clockwise."
 
@@ -200,37 +210,49 @@ sequenceDiagram
     actor User
     participant Browser
     participant Bridge as voicebridge
-    participant Speech as Speech server and LLM
+    participant Speech as Speech server
+    participant Proxy as LLM proxy
+    participant LLM
     participant Rosbridge as rosbridge and the rig
 
     User ->> Browser: "rotate the rig 10 degrees left"
     Browser ->> Bridge: audio
     Bridge ->> Speech: audio
-    Speech ->> Bridge: response.output_item.done, rotate_stage(10, counter-clockwise)
+    Speech ->> Proxy: chat completion, the transcript and the tools
+    Proxy ->> LLM: the same, with a JSON schema of the commands
+    LLM -->> Proxy: {"command": "rotate_stage", ...}
+    Proxy -->> Speech: tool call rotate_stage(10, counter-clockwise)
+    Speech ->> Bridge: response.output_item.done, the tool call
     Note over Bridge: hidden from the browser.<br/>Check the values, render<br/>the read-back and the request.
     Bridge ->> Speech: function_call_output "Not done yet..."
-    Bridge ->> Speech: response.create "Say exactly: Rotating the stage..."
+    Bridge ->> Speech: response.create, the read-back in its instructions
+    Speech ->> Proxy: chat completion, with the read-back
+    Proxy -->> Speech: "Rotating the stage 10 degrees counter-clockwise. Confirm?"
     Speech ->> Browser: the read-back, spoken
     Speech ->> Bridge: response.output_audio_transcript.done
     Note over Bridge: the same sentence: armed
     User ->> Browser: "yes"
     Speech ->> Bridge: input_audio_transcription.completed "Yes."
     Note over Bridge: only confirming words: run it
-    Bridge ->> Speech: response.cancel, the LLM's own reply
+    Speech ->> Proxy: chat completion, "Yes."
+    Proxy -->> Speech: nothing: the bridge answers it
+    Bridge ->> Speech: response.cancel
     Bridge ->> Rosbridge: send_action_goal RotateStageBy {deg: -10.0}
     Rosbridge -->> Bridge: action_result, status 4, SUCCESS
-    Bridge ->> Speech: response.create "Say exactly: The stage turned..."
+    Bridge ->> Speech: response.create, the outcome
+    Speech ->> Proxy: chat completion, with the outcome
+    Proxy -->> Speech: "The stage turned 10 degrees counter-clockwise."
     Speech ->> Browser: the outcome, spoken
 ```
 
 ## The Safety Rules
 
-The bridge exists for these rules. Each one is code, not a request to the LLM, and each has tests in [`tests/test_session.py`](../tests/test_session.py) or [`tests/test_confirmation.py`](../tests/test_confirmation.py).
+The bridge exists for these rules. Each one is code, not a request to the LLM, and each has tests in [`tests/test_session.py`](../tests/test_session.py), [`tests/test_confirmation.py`](../tests/test_confirmation.py) or [`tests/test_llmproxy.py`](../tests/test_llmproxy.py).
 
-1. **The LLM never runs anything.** Its tool calls are proposals: the bridge catches every call of a robot command before the browser sees it.
+1. **The LLM never runs anything.** Its commands are proposals: the bridge catches every call of a robot command before the browser sees it.
 2. **The values are checked before the read-back.** Each parameter has a type and, for a number, limits, e.g. at most 360 degrees and 50 mm: a value out of them is refused, and the LLM is told why, so that it can tell us.
 3. **What is read back is what runs.** The sentence and the request are rendered together, from the same checked values, in `Planner.prepare`.
-4. **The voice must say the read-back exactly.** The LLM speaks it, told to repeat it word for word; the bridge compares what it said with the sentence, ignoring case and punctuation. Anything else cancels the command, and the voice says so.
+4. **The voice says the read-back exactly.** The LLM never writes it: the proxy gives the speech server the sentence itself. The bridge still compares what the voice said with the sentence, ignoring case and punctuation; anything else cancels the command, and the voice says so.
 5. **Only a clear yes runs it.** The bridge decides from our transcript, with the robot file's list of words: the whole answer must be made of them, e.g. "yes", "ok go ahead", "yes please". "Yes but 20 degrees" is not a yes.
 6. **The yes must come after the read-back, and in time.** A yes over the read-back, before it ended, does not count: we cannot have confirmed what we did not hear. After 20 seconds, a yes runs nothing.
 7. **Anything else cancels.** "No", "wait", or any other sentence drops the command; a sentence that is not a yes or a no then goes to the LLM as a new request.
@@ -238,6 +260,8 @@ The bridge exists for these rules. Each one is code, not a request to the LLM, a
 9. **A command never outlives its session.** When the browser disconnects, the goals the session sent are cancelled.
 10. **One command per answer of the LLM.** A second tool call in the same answer is refused.
 11. **What is not in the robot file cannot be said.** StepIt Macro's file leaves out switching the rig off, and the objectives that take raw radians.
+12. **The LLM cannot pretend.** Every turn it answers with a command or a reply, in a JSON schema its server enforces, so a command cannot hide in words. A reply that asks to confirm, or says the robot is acting, is asked again with commands only. See [The LLM Proxy](#the-llm-proxy).
+13. **Yes, no and stop never reach the LLM.** A yes with no command waiting is answered by the bridge: "There is no command waiting for confirmation, so nothing was done."
 
 ### The Confirmation, as a State Machine
 
@@ -326,11 +350,13 @@ Every way out of `Armed` goes back to `Idle`, so a command is confirmed once at 
 | The LLM picks the wrong direction, or guesses one we did not say. | The read-back says the direction in words: we hear it and say no. Measured on Qwen3.8-27B: "turn the table 20 degrees" became clockwise. |
 | The LLM asks for 400 degrees, or 2 metres. | The limits of the parameter: the command is refused before the read-back. |
 | The LLM calls a tool while we only chat. | The read-back: an unexpected "Rotating the stage..." is answered with no, or with anything else. |
-| The LLM says "Rotating 10 degrees clockwise" when the command is counter-clockwise. | The read-back check: the voice did not say the sentence, so the command is cancelled. |
+| The LLM answers "I'll switch the lights on for you" and calls nothing. | The JSON schema: an answer is a command or a reply. A reply with a verb of the robot's read-backs, e.g. "switching", is asked again with commands only; if no command comes, the voice says "Sorry, I did not get that as a command." |
+| The LLM asks "Switching the lights on. Confirm?" itself, and our yes confirms nothing. | The proxy refuses a reply that asks to confirm, and the model never sees the bridge's read-backs to copy. A yes with nothing waiting is answered by the bridge. |
+| The model repeats a sentence without end. | A reply is at most 200 characters, and an answer at most 300 tokens. |
 | The LLM decides that "sure, why not" or "yes but slower" is a yes. | It is not asked: the bridge matches the words itself, and neither sentence is made only of confirming words. |
 | We say yes before the read-back is over. | Rule 6: the command is dropped. |
 | We say yes a minute later, to something else. | The 20 seconds have passed: nothing runs, and the voice says so. |
-| The LLM speaks its own answer to our yes, e.g. "Done!" before anything ran. | The bridge mutes and cancels the server's reply to every turn it answers itself. |
+| The LLM speaks its own answer to our yes, e.g. "Done!" before anything ran. | The proxy answers a yes, a no or a stop with nothing, and the bridge mutes and cancels the server's reply to every turn it answers itself. |
 | The browser tab closes during a move. | The session cancels its goals. |
 | rosbridge is down. | The request fails at once, and the voice says "cannot reach rosbridge". |
 
@@ -400,7 +426,7 @@ config:
 ---
 sequenceDiagram
     actor User
-    participant Speech as Speech server and LLM
+    participant Speech as Speech server
     participant Bridge as voicebridge
     participant Rig as rosbridge and the rig
 
@@ -411,9 +437,9 @@ sequenceDiagram
     Bridge ->> Speech: response.cancel
     Bridge ->> Rig: call_service .../_action/cancel_goal
     Rig -->> Bridge: the goal is cancelled, the stage brakes
-    Bridge ->> Speech: response.create "Say exactly: Stopped."
+    Bridge ->> Speech: response.create, "Stopped."
     Rig -->> Bridge: action_result of the move, status 5
-    Bridge ->> Speech: response.create "Say exactly: That did not work: it was stopped before the end."
+    Bridge ->> Speech: response.create, "That did not work: it was stopped before the end."
 ```
 
 On the rig, with its fake motors, the commander logged the cancel 1.5 seconds after the move started, and halted the tree.
@@ -584,7 +610,7 @@ A number printed into a text reads as a person says it: 10.0 is "10". The enviro
 
 ## The Modules
 
-The package is fourteen modules in [`src/voicebridge`](../src/voicebridge), in four layers. A module imports only from the layers below it.
+The package is fifteen modules in [`src/voicebridge`](../src/voicebridge), in four layers. A module imports only from the layers below it.
 
 | Layer | Module | Responsibility | Must never |
 |---|---|---|---|
@@ -592,6 +618,7 @@ The package is fourteen modules in [`src/voicebridge`](../src/voicebridge), in f
 | | `docs` | `commands.md`, from the robot file and its examples. | |
 | Conversation | `server` | The WebSocket server; one `Session` per browser, and its connection to the speech server. | Look into the events. |
 | | `session` | The rules of [Inside a Session](#inside-a-session). | Decide yes with the LLM; talk to rosbridge itself. |
+| | `llmproxy` | The LLM proxy of [The LLM Proxy](#the-llm-proxy): the bridge's sentences, one JSON decision per turn, what the model never sees. | Run a command, or decide a yes. |
 | Robot | `planner` | From a tool call to a `Prepared` command: checks, reads, read-back and request. | Run the command. |
 | | `robot` | `render_request`, `judge`, the `Robot` port and `RosbridgeRobot`. | Know a robot's names. |
 | | `prompt` | The LLM's instructions. | |
@@ -667,6 +694,7 @@ flowchart TB
     subgraph Conversation
         server
         session
+        llmproxy
     end
     subgraph Robot
         planner
@@ -685,6 +713,9 @@ flowchart TB
     end
 
     cli --> server
+    cli --> llmproxy
+    llmproxy --> phrases
+    llmproxy --> realtime
     cli --> docs
     docs --> planner
     server --> session
@@ -706,11 +737,11 @@ flowchart TB
     classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
 ```
 
-Some edges are left out for clarity, e.g. `cli` imports most modules and `session` also imports `catalogue` and `robot`; none goes up a layer, and there is no cycle. One edge is worth knowing: `robot` holds both the `Robot` port and its rosbridge implementation, so `session` imports, through it, the module of the rosbridge client, without using it. The session only ever calls `Robot.execute`, and the tests give it a fake.
+Some edges are left out for clarity, e.g. `cli` imports most modules, `session` also imports `catalogue` and `robot`, and `llmproxy` imports `catalogue`; `session` and `llmproxy` share only `realtime.exact_speech` and `scripted_sentence`, the tags of a sentence of the bridge; none goes up a layer, and there is no cycle. One edge is worth knowing: `robot` holds both the `Robot` port and its rosbridge implementation, so `session` imports, through it, the module of the rosbridge client, without using it. The session only ever calls `Robot.execute`, and the tests give it a fake.
 
 ## The Objects at Run Time
 
-Once `voicebridge serve` runs, these objects exist. One `Catalogue` and one `Rosbridge` connection serve every browser; each browser gets its own `Session`, with its own pending command.
+Once `voicebridge serve` runs, these objects exist. One `Catalogue`, one `Rosbridge` connection and one `LlmProxy` serve every browser; each browser gets its own `Session`, with its own pending command.
 
 ```mermaid
 ---
@@ -804,8 +835,19 @@ classDiagram
         publish()
     }
     class Catalogue
+    class LlmProxy {
+        start()
+        stop()
+    }
+    class Guard {
+        prompt
+        verbs
+        matcher
+    }
 
     BridgeServer --> Catalogue
+    LlmProxy *-- Guard
+    Guard ..> Catalogue : made from
     BridgeServer --> Robot
     BridgeServer ..> Session : one per browser
     Session --> Planner
@@ -826,7 +868,7 @@ A `Session`, in [`session.py`](../src/voicebridge/session.py), is the only place
 
 ### The Events It Reads
 
-From the browser, it changes one event: every `session.update` gets the robot's tools and the LLM's instructions added, and `tool_choice: auto`, so that the robot's tools survive whatever the browser does with its own, e.g. switching its web search off. Everything else passes unchanged.
+From the browser, it changes two things. Every `session.update` gets the robot's tools and the LLM's instructions added, and `tool_choice: auto`, so that the robot's tools survive whatever the browser does with its own, e.g. switching its web search off. And when the robot file has a `greeting`, the browser's opening message, the demo's "start the conversation with a greeting", is replaced by the greeting, "Ready." for StepIt Macro, said as written; once we have spoken, a typed message goes to the LLM as usual. Everything else passes unchanged.
 
 From the speech server, each event goes through these questions, in order:
 
@@ -914,16 +956,48 @@ A robot call is hidden in every form the server sends it: `response.output_item.
 
 ### The Bridge's Own Replies
 
-The bridge speaks by asking the server for a reply: a `response.create` with `instructions` that say "Say exactly the following text, word for word...", and `tool_choice: none`. Four rules keep these requests from colliding with the server's own work:
+The bridge speaks by asking the server for a reply: a `response.create` whose `instructions` carry the sentence between the tags `<voicebridge-say>` and `</voicebridge-say>`, with `tool_choice: none`. The server builds its LLM request with those instructions, and the proxy, finding the tags, answers with the sentence itself. Four rules keep these requests from colliding with the server's own work:
 
 - **Tagged.** Each request carries `metadata: {voicebridge: vb-<n>}`, which the server echoes in `response.created` and `response.done`. The bridge tells its replies from the server's by the tag, never by timing.
 - **Queued, one at a time.** A reply is sent only when no response is in progress; the next waits for the `response.done` of the one before. A server that refuses one, `conversation_already_has_active_response`, gets it again at its next `response.done`, and the browser never sees the error.
 - **Tool answers first.** The server refuses a reply while a tool call has no answer, so the `function_call_output` of every call is sent before any `response.create`, and no reply is asked for while a call is still being prepared.
-- **Exact.** For a read-back, the bridge collects what the voice said, from `response.output_audio_transcript.done`, and checks it at the `response.done`.
+- **Checked.** For a read-back, the bridge collects what the voice said, from `response.output_audio_transcript.done`, and checks it at the `response.done`. Through the proxy it is always the sentence; the check catches a speech server that reaches its LLM directly.
 
 ### Muting the Server's Reply
 
 The speech server answers every turn of the user by itself: VAD, STT, LLM and TTS run as one pipeline, and there is no option to stop it. When the bridge answers a turn itself, after a yes, a no, a late yes or a stop, it must silence that answer: otherwise the LLM might say "Done!" before anything ran, or call a tool again. So the bridge sends `response.cancel`, and for the next 10 seconds mutes and cancels any reply it did not ask for. A new turn, `input_audio_buffer.speech_started`, ends the mute at once: what the server says after it answers the new turn.
+
+## The LLM Proxy
+
+The speech server sends every reply through its LLM: there is no event that makes it say a fixed text. And an LLM asked to "say exactly" a sentence sometimes says another, or answers a command in words without calling it: "I can do that. Moving the camera closer by 10 millimetres.", while nothing moves. The proxy, in [`llmproxy.py`](../src/voicebridge/llmproxy.py), takes the LLM's place for the speech server, so that the bridge decides what reaches the model and what comes back. For each request of the speech server, in order:
+
+1. **A sentence of the bridge** in the instructions, between the tags: the proxy answers with it, and the model is not asked.
+2. **A request without tools**, e.g. a summary the speech server asks for on its own: passed through as it is.
+3. **The speech server's follow-up** after the bridge answered a command, a request that ends with the tool's output: answered with nothing, as the bridge speaks next. A rejection is the exception: the model explains it.
+4. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
+5. **Any other turn**: the model is asked for one decision, below.
+
+The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: with llama-swap, a request naming another model would unload the voice's model and load that one.
+
+### One Decision per Turn
+
+The proxy removes the tools from the request, lists the commands in the instructions, and asks for a JSON object of this schema, as `response_format`:
+
+```json
+{"oneOf": [
+  {"properties": {"command": {"const": "move_camera"}, "arguments": {"properties": {"millimetres": {"type": "number"}, "direction": {"enum": ["closer", "farther"]}}}}},
+  {"properties": {"command": {"const": "take_test_shot"}, "arguments": {}}},
+  {"properties": {"reply": {"type": "string", "maxLength": 200}}}
+]}
+```
+
+A server that enforces the schema, as llama.cpp does with a grammar, can only produce one of these: the model cannot answer a command in loose words. The proxy turns a command into the tool call the speech server expects, and a reply into its words. A command and a reply never come together, so the user hears only the bridge's read-back about a command.
+
+A reply can still pretend. The proxy refuses a reply that asks to confirm, or that says the robot is acting with a verb of the robot's own sentences, e.g. "moving", "taking", "switching": the verbs come from the `say` and `started` templates of the robot file, plus "turning" and "done". It then asks again with the commands only, which the schema leaves the model no way out of. If no command comes back, e.g. from a server that ignores the schema, the voice says "Sorry, I did not get that as a command. Please say it again."
+
+### What the Model Never Sees
+
+A model that has heard the bridge read commands back starts doing it itself: after a few turns it answers "Switching the lights on. Confirm?" without calling the command. So the proxy removes from the history every sentence it said in the model's place, the read-backs, outcomes and greeting, before it asks the model. The model sees our requests and its own calls, never the bridge's words. And it never sees the turn of a yes, a no or a stop, which the proxy answers with nothing.
 
 ## Talking to the Robot
 
@@ -941,17 +1015,18 @@ The speech server answers every turn of the user by itself: VAD, STT, LLM and TT
 
 ## Threads and Time
 
-There is one thread and one asyncio event loop. The WebSocket servers and clients, the sessions and the rosbridge client all run on it. A command that runs, e.g. a focus stack of half an hour, is an asyncio task of its session, so the session keeps reading events, and hears "stop", while it runs. Closing a session cancels its tasks; cancelling the task of a goal sends `cancel_action_goal`.
+There is one thread and one asyncio event loop. The WebSocket servers and clients, the sessions, the LLM proxy, an aiohttp server and client, and the rosbridge client all run on it. A command that runs, e.g. a focus stack of half an hour, is an asyncio task of its session, so the session keeps reading events, and hears "stop", while it runs. Closing a session cancels its tasks; cancelling the task of a goal sends `cancel_action_goal`.
 
 There is no second thread because there is no rclpy: a ROS 2 node would need its own thread for `rclpy.spin`, and a pool of threads for the commands that block. Through rosbridge, the robot is one more WebSocket on the same loop.
 
 ## Tests
 
-`./docker/dock.sh test` runs [`bin/test.sh`](../bin/test.sh), as CI does: ruff, `voicebridge check` of every robot file, and pytest. The tests need no ROS, no speech server and no LLM: they use a fake robot, a fake rosbridge server and a fake speech server. The session and server tests use a made-up robot, [`tests/robots/arm.yaml`](../tests/robots/arm.yaml), which also shows that nothing in the bridge is StepIt's.
+`./docker/dock.sh test` runs [`bin/test.sh`](../bin/test.sh), as CI does: ruff, `voicebridge check` of every robot file, and pytest. The tests need no ROS, no speech server and no LLM: they use a fake robot, a fake rosbridge server, a fake speech server and a fake LLM. The session and server tests use a made-up robot, [`tests/robots/arm.yaml`](../tests/robots/arm.yaml), which also shows that nothing in the bridge is StepIt's.
 
 | Test | What it covers |
 |---|---|
-| `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply, closing during a command. |
+| `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply and a call inside it, a yes with nothing waiting, the greeting, closing during a command. |
+| `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through. |
 | `test_confirmation.py` | The state machine, with a fake clock. |
 | `test_phrases.py` | What counts as yes, no and stop, and what does not, e.g. "yes but 20 degrees", "right". |
 | `test_catalogue.py` | The robot file: short forms, the tool of the LLM, the check of arguments, and each mistake the loader finds. |
@@ -964,12 +1039,12 @@ There is no second thread because there is no rclpy: a ROS 2 node would need its
 
 Not tested automatically, and how to check it by hand:
 
-- **The LLM's understanding.** `voicebridge eval` scores it on the examples, and on phrases of our own with `--say`. Qwen3.8-27B understood 35 of 35 examples and 20 of 20 other phrasings; with the rule against guessing, it asks back for "a bit closer" and "nudge the rail forward", but still chose a direction for "turn the table 20 degrees" and "move the camera 3 mm".
+- **The LLM's understanding.** `voicebridge eval` scores it on the examples through the bridge's proxy, as the bridge asks, and on phrases of our own with `--say`. Bonsai 2 27B on llama.cpp understood 35 of 35 examples, and 10 of 10 requests replayed after a history in which the LLM had pretended; Qwen3.8-27B on llama.cpp did the same. With the rule against guessing, both ask back for "move the camera closer"; Qwen3.8-27B still chose a direction for "turn the table 20 degrees".
 - **The real rig.** `voicebridge run` sends one command through rosbridge. Every command of StepIt Macro was run on the rig with its fake hardware; `TakeShot` and `FocusStack` fail there, as the fake camera does not see the fake Freezer's shots.
-- **The real speech server and the voice.** Not tested yet: the read-back check, the mute and the tags rely on the events of the speech server's code, read in its repository. Talk to the rig as in the README, and watch the bridge's log, which names every proposal, read-back, answer and outcome.
+- **The real speech server and the voice.** Checked by voice with Bonsai: 15 commands read back, confirmed and run, a "no" that cancelled, a missing value asked for, and "stop it" during a test shot. The read-back, the mute and the tags rely on the events of the speech server's code. Talk to the rig as in the README, and watch the bridge's log, which names every decision of the LLM, every sentence of the bridge, every proposal, answer and outcome.
 - **WebRTC.** Not supported: see [Design Decisions and Trade-offs](#design-decisions-and-trade-offs).
 
-## How to Extend StepIt Speech2Speech
+## How to Extend StepIt Speech
 
 **Add a command.** Copy one that looks like it in the robot file, change it, and run `voicebridge check`; the [README](../README.md#adding-a-command) has the steps. Add `examples`: they teach the LLM, test the command, and fill `commands.md`. Regenerate `commands.md` and restart the bridge.
 
@@ -989,9 +1064,13 @@ Not tested automatically, and how to check it by hand:
 
 **YAML templates, not Python plugins.** A command could be a Python class, discovered as a plugin. Here a command is a dozen lines of YAML: anyone who can read the rig's objectives can add one, and the loader checks it before anything runs. The price: a command that needs real logic, e.g. a loop, does not fit; it becomes an objective of the commander, which is where the logic of the rig belongs anyway.
 
-**One tool per command.** Each command is a tool of its own, with the schema of its parameters, not one generic tool with a command name. The LLM chooses better among named tools, and the schema guides its values. The price: the LLM's prompt grows with the commands: for StepIt Macro's fifteen, the tools are about 6,300 characters and the instructions 1,800.
+**One choice per command.** Each command is a choice of its own in the schema, with the schema of its parameters, and a tool of its own for the speech server, not one generic command with a name. The schema guides the values, e.g. a direction is one of two words. The price: the LLM's prompt grows with the commands: for StepIt Macro's fifteen, the tools are about 6,300 characters and the instructions 1,800.
 
-**The LLM speaks the read-back, and the bridge checks it.** The bridge has no voice of its own: only the speech server's TTS speaks, and it speaks what the LLM writes. So the bridge tells the LLM to repeat the sentence word for word, and compares what it said with the sentence. A sentence it changes cancels the command. A TTS in the bridge would be exact, at the price of a second voice and a second model on the GPU.
+**The bridge answers for the LLM, rather than speaking itself.** The bridge has no voice of its own: only the speech server's TTS speaks, and it speaks what its LLM writes. So the bridge became the speech server's LLM, and answers with its own sentences when it has one. The voice says them exactly, in the same voice as the rest. A TTS in the bridge would be exact too, at the price of a second voice and a second model on the GPU. The price of the proxy: the speech server must be configured to reach its LLM through the bridge.
+
+**A JSON schema, not tool calls.** Forcing a tool call, `tool_choice: required`, would also stop the model from answering in words, but servers do not all enforce it: azllm ignores it, and llama.cpp leaves it unenforced with the chat template of Qwen3.8, where the model answered "I'll switch the lights on for you" and called nothing. A JSON schema is enforced by llama.cpp's grammar whatever the template. The price: the LLM server must support `response_format` of type `json_schema`, and the proxy translates between the schema and the speech server's tool calls.
+
+**Bonsai 2 27B on llama.cpp.** PrismML's ternary build of Qwen3.8-27B is 7.6 GB, against 17.6 GB for Qwen3.8-27B in 4 bits, and was as accurate on our tests, in about half a second per answer. It leaves 10 GB of the 24 GB GPU free, where Qwen left the voice so little that it once crashed. The price: it needs upstream llama.cpp b11555 or newer, and PrismML lists malformed tool calls among its known issues, which the JSON schema avoids.
 
 **Fixed words for yes, never the LLM.** Whether we confirmed is decided by matching our transcript against lists of the robot file. An LLM would understand "go on then"; it would also find a yes where there is none. The price: a yes not on the list cancels, and we say it again.
 

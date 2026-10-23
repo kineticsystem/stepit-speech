@@ -13,6 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the image
-        run: docker build -f docker/Dockerfile -t stepit-speech2speech .
+        run: docker build -f docker/Dockerfile -t stepit-speech .
       - name: Test
-        run: docker run --rm stepit-speech2speech bin/test.sh
+        run: docker run --rm stepit-speech bin/test.sh

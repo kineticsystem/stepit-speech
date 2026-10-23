@@ -231,7 +231,7 @@ class ConfirmationSettings:
     """How the bridge hears yes, no and stop: fixed lists of words, never the LLM."""
 
     timeout_s: float = 20.0
-    prompt: str = "Say yes to confirm."
+    prompt: str = "Confirm?"
     confirm: tuple[str, ...] = ()
     decline: tuple[str, ...] = ()
     stop: tuple[str, ...] = ()
@@ -250,6 +250,8 @@ class Catalogue:
     confirmation: ConfirmationSettings
     calls: Mapping[str, Call]
     commands: Mapping[str, Command]
+    # Said when a session starts, in place of the LLM's own greeting; empty: the LLM greets.
+    greeting: str = ""
 
     def tool_specs(self) -> list[dict[str, Any]]:
         return [command.tool_spec() for command in self.commands.values()]
@@ -261,7 +263,7 @@ class Catalogue:
 # ── Loading ──────────────────────────────────────────────────────────────────
 
 _TOP_KEYS = {"robot", "rosbridge", "confirmation", "calls", "commands"}
-_ROBOT_KEYS = {"name", "description", "instructions"}
+_ROBOT_KEYS = {"name", "description", "instructions", "greeting"}
 _CONFIRMATION_KEYS = {"timeout_s", "prompt", "confirm", "decline", "stop", "fillers", "stop_command"}
 _CALL_KEYS = {"description", "type", "request", "qos", "success", "message", "result", "timeout_s", *CALL_KINDS}
 _COMMAND_KEYS = {
@@ -333,6 +335,7 @@ def parse(data: Any, source: str = "robot file") -> Catalogue:
         name=str(robot.get("name", "the robot")),
         description=str(robot.get("description", "")).strip(),
         instructions=str(robot.get("instructions", "")).strip(),
+        greeting=str(robot.get("greeting", "")).strip(),
         rosbridge_url=str(data.get("rosbridge", "ws://localhost:9090")),
         confirmation=confirmation,
         calls=calls,
@@ -503,7 +506,7 @@ def _parse_confirmation(spec: Any, commands: Mapping[str, Command], where: str) 
         raise RobotFileError(f"{where}.stop: the stop words need a stop_command to run")
     return ConfirmationSettings(
         timeout_s=float(spec.get("timeout_s", 20.0)),
-        prompt=str(spec.get("prompt", "Say yes to confirm.")),
+        prompt=str(spec.get("prompt", "Confirm?")),
         stop_command=stop_command,
         **words,
     )

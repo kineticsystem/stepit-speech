@@ -12,6 +12,7 @@ import websockets
 from conftest import ARM
 
 from voicebridge.catalogue import load
+from voicebridge.realtime import scripted_sentence
 from voicebridge.robot import RosbridgeRobot
 from voicebridge.rosbridge import Rosbridge
 from voicebridge.server import BridgeServer
@@ -87,7 +88,8 @@ async def test_a_spoken_command_from_the_browser_to_the_robot(fake_rosbridge):
             assert output["item"]["call_id"] == "call_1"
             create = await speech.expect("response.create")
             tag = create["response"]["metadata"]["voicebridge"]
-            assert create["response"]["instructions"].endswith("Turning 10 degrees left. Say yes to confirm.")
+            said = scripted_sentence(create["response"]["instructions"])
+            assert said == "Turning 10 degrees left. Say yes to confirm."
 
             # The voice reads it back; the user says yes.
             await speech.send(
@@ -101,7 +103,7 @@ async def test_a_spoken_command_from_the_browser_to_the_robot(fake_rosbridge):
             )
             await speech.expect("response.cancel")
             done = await speech.expect("response.create")
-            assert done["response"]["instructions"].endswith("Turned.")
+            assert scripted_sentence(done["response"]["instructions"]) == "Turned."
 
             # The goal went to rosbridge, exactly once.
             goals = fake_rosbridge.ops("send_action_goal")

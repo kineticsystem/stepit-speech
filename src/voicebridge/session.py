@@ -15,6 +15,8 @@ through unchanged. It does five things:
    asked whether the user confirmed.
 5. When it takes over a user's turn (yes, no, stop), it mutes and cancels the
    speech server's own reply to that turn, and speaks its own.
+6. When the robot has a greeting, it says it in place of the browser's
+   opening message, which asks the LLM to greet in its own words.
 
 The replies the bridge asks for are queued and sent one at a time, when the
 server is not answering, and tagged in their metadata so that the bridge knows
@@ -67,6 +69,9 @@ TOO_LATE = "That came too late, so nothing was done. Please give the command aga
 READ_BACK_FAILED = "I could not read the command back exactly, so I cancelled it. Please say it again."
 ONE_AT_A_TIME = "Rejected: one command at a time. Nothing was done for this call."
 BRIDGE_FAILED = "Something went wrong in the bridge. Nothing more was done."
+MUTED_CALL = "Not done: the system answered the user's last words itself. Nothing was done for this call."
+NOTHING_TO_CONFIRM = "There is no command waiting for confirmation, so nothing was done."
+SPOKE_OVER = "I had not finished reading the command back, so nothing was done. Please give the command again."
 
 
 @dataclass
@@ -118,11 +123,24 @@ class Session:
         self._hidden: set[str] = set()                    # item and call ids of robot calls
         self._commanded: set[str] = set()                 # responses that already called a command
         self._tags = itertools.count(1)
+        self._greeted = not catalogue.greeting            # no greeting: nothing to replace
+        self._skip_create = False                         # the response.create of the opening message
         self._tasks: set[asyncio.Task] = set()
 
     # ── The two directions ─────────────────────────────────────────────────────
 
     async def from_browser(self, event: dict[str, Any]) -> None:
+        if not self._greeted and _user_message(event):
+            # The browser's opening message, e.g. "start the conversation with a greeting":
+            # the robot's own greeting answers it, word for word.
+            self._greeted = True
+            self._skip_create = True
+            self._say(self._catalogue.greeting)
+            await self._pump()
+            return
+        if self._skip_create and event.get("type") == "response.create":
+            self._skip_create = False
+            return
         await self._to_upstream(inject_session(event, self._tools, self._instructions))
 
     async def from_upstream(self, event: dict[str, Any]) -> None:
@@ -142,12 +160,18 @@ class Session:
                 return
 
         if rid is not None and rid in self._muted:
+            muted_call = command_call(event, self._names)
+            if muted_call is not None:
+                # The server waits for an answer to every call, even in a reply nobody hears.
+                self._hidden.add(muted_call.call_id)
+                self._outputs.append(function_call_output(muted_call.call_id, MUTED_CALL))
             if kind == "response.done":
                 self._muted.discard(rid)
                 await self._finished(rid, event)
             return
 
         if kind == USER_TRANSCRIPT:
+            self._greeted = True  # the user spoke first: a later typed message is theirs
             await self._to_browser(event)
             await self._on_user_said(str(event.get("transcript") or ""))
             return
@@ -273,6 +297,11 @@ class Session:
         elif answer.verdict is Verdict.EXPIRED:
             await self._take_over()
             self._say(TOO_LATE)
+        elif meaning is Meaning.CONFIRM:
+            # A yes that confirms nothing: the bridge says so, rather than the LLM playing along.
+            log.info("Nothing to confirm: the user said %r (%s)", transcript, answer.verdict.name)
+            await self._take_over()
+            self._say(NOTHING_TO_CONFIRM if answer.verdict is Verdict.NOTHING_PENDING else SPOKE_OVER)
         elif answer.verdict is Verdict.DROPPED:
             log.info("Dropped the pending command: the user said %r", transcript)
         await self._pump()
@@ -395,3 +424,9 @@ class Session:
         task = asyncio.create_task(guarded())
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+
+def _user_message(event: dict[str, Any]) -> bool:
+    item = event.get("item")
+    return (event.get("type") == "conversation.item.create" and isinstance(item, dict)
+            and item.get("type", "message") == "message" and item.get("role") == "user")

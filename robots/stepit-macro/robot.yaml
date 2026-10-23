@@ -15,6 +15,8 @@
 
 robot:
   name: StepIt Macro
+  # Said when someone connects, instead of the LLM's own greeting.
+  greeting: Ready.
   description: >-
     It is a focus stacking rig for macro photography. A camera rides on a
     motorised rail, which moves it closer to the subject or farther from it.
@@ -36,7 +38,7 @@ confirmation:
   # How long a command read back waits for its yes, in seconds.
   timeout_s: 20
   # Said after every read-back.
-  prompt: Say yes to confirm.
+  prompt: Confirm?
   # The whole answer must be made of these, and of fillers, to confirm.
   confirm: [yes, yeah, yep, yup, ok, okay, confirm, confirmed, go, go ahead, go with it, do it, proceed, sure,
             affirmative, correct, that's correct, that's right]
