@@ -1,0 +1,38 @@
+[project]
+name = "stepit-speech2speech"
+version = "0.1.0"
+description = "Drive a ROS 2 robot by voice: spoken commands, read back and confirmed, sent through rosbridge"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Giovanni Remigi" }]
+requires-python = ">=3.10"
+dependencies = [
+    "websockets>=14",
+    "PyYAML>=6",
+    "Jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[project.scripts]
+voicebridge = "voicebridge.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

@@ -1,0 +1,107 @@
+# Copyright (c) 2026 Giovanni Remigi
+# SPDX-License-Identifier: MIT
+"""The robot file of StepIt Macro: every example prepares, and the requests are those of the rig."""
+
+import json
+
+import pytest
+from conftest import STEPIT_MACRO
+
+from voicebridge.catalogue import load
+from voicebridge.docs import generate
+from voicebridge.planner import Planner, Rejected
+
+EXAMPLES = [(name, example) for name, command in load(STEPIT_MACRO).commands.items()
+            for example in command.examples]
+
+
+@pytest.mark.parametrize("name, example", EXAMPLES, ids=[example.phrase for _, example in EXAMPLES])
+async def test_every_example_prepares(stepit_macro, name, example):
+    prepared = await Planner(stepit_macro, None).prepare(name, example.expect, reads=example.reads)
+    assert prepared.sentence
+    if prepared.request is not None:
+        json.dumps(prepared.request.message())
+
+
+def test_every_command_has_an_example(stepit_macro):
+    assert [name for name, command in stepit_macro.commands.items() if not command.examples] == []
+
+
+async def objective(stepit_macro, name, arguments, reads=None):
+    prepared = await Planner(stepit_macro, None).prepare(name, arguments, reads=reads)
+    assert prepared.request.target == "/commander/execute_objective"
+    assert prepared.request.type == "btcpp_ros2_interfaces/action/ExecuteTree"
+    return prepared.sentence, prepared.request.payload
+
+
+async def test_left_is_counter_clockwise_and_negative(stepit_macro):
+    sentence, goal = await objective(stepit_macro, "rotate_stage", {"degrees": 10, "direction": "counter-clockwise"})
+    assert sentence == "Rotating the stage 10 degrees counter-clockwise."
+    assert goal == {"target_tree": "RotateStageBy", "payload": "{deg: -10.0}"}
+    _, goal = await objective(stepit_macro, "rotate_stage", {"degrees": 10, "direction": "clockwise"})
+    assert goal["payload"] == "{deg: 10.0}"
+
+
+async def test_closer_is_toward_the_subject_and_negative(stepit_macro):
+    sentence, goal = await objective(stepit_macro, "move_camera", {"millimetres": 1, "direction": "closer"})
+    assert sentence == "Moving the camera 1 millimetre closer."
+    assert goal == {"target_tree": "MoveRailBy", "payload": "{mm: -1.0}"}
+
+
+async def test_a_test_shot(stepit_macro):
+    sentence, goal = await objective(stepit_macro, "take_test_shot", {})
+    assert sentence == "Taking a test shot."
+    assert goal == {"target_tree": "TakeShot", "payload": ""}
+
+
+async def test_manual_drive_off_hands_the_rig_to_the_trajectory_controller(stepit_macro):
+    _, goal = await objective(stepit_macro, "manual_drive", {"state": "off"})
+    assert goal == {"target_tree": "ActivateController", "payload": "{controllers: joint_trajectory_controller}"}
+
+
+async def test_a_focus_stack_reads_the_plan_of_the_rig(stepit_macro):
+    plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
+            "state.far": [2.0]}
+    sentence, goal = await objective(stepit_macro, "start_focus_stack", {}, reads={"plan": plan})
+    assert sentence == "Starting a focus stack of 10 shots at 35 angles, from minus 17 to 17 degrees: 350 pictures."
+    assert goal == {"target_tree": "FocusStack",
+                    "payload": "{shots: 10, stage_from: -17.0, stage_to: 17.0, angles: 35}"}
+
+
+@pytest.mark.parametrize("missing, complaint", [("state.near", "near end"), ("state.far", "far end")])
+async def test_a_focus_stack_needs_both_marks(stepit_macro, missing, complaint):
+    plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
+            "state.far": [2.0], missing: []}
+    with pytest.raises(Rejected, match=complaint):
+        await Planner(stepit_macro, None).prepare("start_focus_stack", {}, reads={"plan": plan})
+
+
+async def test_set_stack_needs_something_to_change(stepit_macro):
+    with pytest.raises(Rejected, match="Say what to change"):
+        await Planner(stepit_macro, None).prepare("set_stack", {})
+
+
+async def test_the_lights_keep_the_other_outputs(stepit_macro):
+    planner = Planner(stepit_macro, None)
+    on = await planner.prepare("lights", {"state": "on"}, reads={"outputs": {"outputs": 0b1100_0000}})
+    assert on.request.payload == {"outputs": 0b1100_0011}
+    off = await planner.prepare("lights", {"state": "off"}, reads={"outputs": {"outputs": 0b1100_0011}})
+    assert off.request.payload == {"outputs": 0b1100_0000}
+
+
+def test_stop_needs_no_confirmation(stepit_macro):
+    assert stepit_macro.confirmation.stop_command == "stop"
+    assert not stepit_macro.commands["stop"].confirm
+
+
+def test_power_off_is_not_a_voice_command(stepit_macro):
+    targets = json.dumps([command.run.arguments for command in stepit_macro.commands.values() if command.run])
+    assert "power_off" not in targets
+
+
+async def test_commands_md_is_up_to_date(stepit_macro):
+    path = STEPIT_MACRO.parent / "commands.md"
+    expected = await generate(stepit_macro, "robots/stepit-macro/robot.yaml")
+    assert path.read_text(encoding="utf-8") == expected, (
+        "commands.md is out of date: run "
+        "voicebridge docs robots/stepit-macro/robot.yaml -o robots/stepit-macro/commands.md")
