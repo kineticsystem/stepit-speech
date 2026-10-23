@@ -943,7 +943,7 @@ The speech server answers every turn of the user by itself: VAD, STT, LLM and TT
 
 There is one thread and one asyncio event loop. The WebSocket servers and clients, the sessions and the rosbridge client all run on it. A command that runs, e.g. a focus stack of half an hour, is an asyncio task of its session, so the session keeps reading events, and hears "stop", while it runs. Closing a session cancels its tasks; cancelling the task of a goal sends `cancel_action_goal`.
 
-[s2s-ros2](https://github.com/kineticsystem/s2s-ros2) needed a second thread for `rclpy.spin` and a pool of threads for the commands. Through rosbridge, the robot is one more WebSocket, and both disappear.
+There is no second thread because there is no rclpy: a ROS 2 node would need its own thread for `rclpy.spin`, and a pool of threads for the commands that block. Through rosbridge, the robot is one more WebSocket on the same loop.
 
 ## Tests
 
@@ -987,7 +987,7 @@ Not tested automatically, and how to check it by hand:
 
 **rosbridge, not rclpy.** The bridge reaches the robot through rosbridge, which StepIt Commander runs on port 9090 for StepIt UI already. It needs no ROS installation, no DDS configuration and no second thread, runs anywhere, and is tested without ROS. The price: a message type rosbridge does not know fails at run time, not at start, and every request is a JSON round trip through one more program.
 
-**YAML templates, not Python plugins.** s2s-ros2 made each command a Python package with an entry point. Here a command is a dozen lines of YAML: anyone who can read the rig's objectives can add one, and the loader checks it before anything runs. The price: a command that needs real logic, e.g. a loop, does not fit; it becomes an objective of the commander, which is where the logic of the rig belongs anyway.
+**YAML templates, not Python plugins.** A command could be a Python class, discovered as a plugin. Here a command is a dozen lines of YAML: anyone who can read the rig's objectives can add one, and the loader checks it before anything runs. The price: a command that needs real logic, e.g. a loop, does not fit; it becomes an objective of the commander, which is where the logic of the rig belongs anyway.
 
 **One tool per command.** Each command is a tool of its own, with the schema of its parameters, not one generic tool with a command name. The LLM chooses better among named tools, and the schema guides its values. The price: the LLM's prompt grows with the commands: for StepIt Macro's fifteen, the tools are about 6,300 characters and the instructions 1,800.
 

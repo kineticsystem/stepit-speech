@@ -35,8 +35,6 @@ It is built on [Hugging Face Speech-to-Speech](https://github.com/huggingface/sp
 - **A command is a few lines of YAML.** A description, its parameters, the sentence to read back and what to run.
 - **No ROS is needed** to run the bridge or its tests: it speaks to the robot through rosbridge.
 
-It is the successor of [s2s-ros2](https://github.com/kineticsystem/s2s-ros2), which ran commands as soon as the LLM produced them.
-
 ## How It Works
 
 The bridge sits between the browser page of Speech-to-Speech and its server. The page connects to the bridge instead of the server, and the bridge passes everything through, except the robot's commands:
@@ -118,7 +116,7 @@ The LLM only proposes a command. Checking it, reading it back, hearing the yes a
 ## Prerequisites
 
 - Ubuntu 24.04 and [Docker Engine](https://docs.docker.com/engine/install/ubuntu/).
-- An NVIDIA GPU with at least 16 GB of memory for the speech server and the LLM, as for [s2s-ros2](https://github.com/kineticsystem/s2s-ros2#prerrequisites).
+- An NVIDIA GPU for the speech server and the LLM. On our RTX 4090, 24 GB, the speech-to-text, Qwen3.8-27B with an 8K context and the Qwen3-TTS voice fit together, with 1.5 GB to spare: see [Start the LLM](#start-the-llm).
 - A robot with rosbridge. For StepIt Macro, the rig of [stepit-macro](https://github.com/kineticsystem/stepit-macro), which runs with fake motors, a fake camera and a fake Freezer by default: no hardware is needed to try it.
 
 The tests need none of these: they run in the image, with fakes of the robot, rosbridge and the speech server.
@@ -156,19 +154,29 @@ Its rosbridge listens on port 9090, the address in [`robots/stepit-macro/robot.y
 
 ### Start the LLM
 
-Any OpenAI-compatible server works. On our computer, llama-swap serves Qwen3.8-27B on port 8085 as `azllm-text`, the text-only variant; it loads the model on the first request, in 1 to 2 minutes.
+Any OpenAI-compatible server works. On our computer, llama-swap serves Qwen3.8-27B on port 8085 as `azllm-voice`: text only, an 8K context, which voice turns never exceed, and 4.75 GB of the GPU left free for the voice models. Its entry in `qwen-4090-bench/scripts/llama-swap.yaml`:
+
+```yaml
+azllm-voice:
+  cmd: ${serve}/azllm.sh --no-vision --ctx 8192 --free 4864 --port ${PORT} -- -ub 512 --gemm-rows 2048
+```
+
+The speech server loads the LLM while it starts, before its voice: an LLM that takes the whole GPU, e.g. `azllm-text` with its 148K context, leaves no room for the voice, which then fails with `cudaMalloc failed: out of memory`.
 
 ### Start the Speech-to-Speech Server
 
-In the speech-to-speech repository, pointing it at the LLM through the chat completions API:
+In the speech-to-speech repository, pointing it at the LLM through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU:
 
 ```bash
 uv run speech-to-speech serve \
   --llm_backend chat-completions \
   --responses_api_base_url "http://127.0.0.1:8085/v1" \
   --responses_api_api_key "" \
-  --model_name azllm-text
+  --model_name azllm-voice \
+  --qwen3_tts_ggml_quantization Q8_0
 ```
+
+It takes about a minute to load speech-to-text, the LLM and the voice.
 
 It listens on `ws://127.0.0.1:8765/v1/realtime`.
 
@@ -295,5 +303,7 @@ They check the style with ruff, prepare every example of every robot file, and r
 **The voice says "That did not work: cannot reach rosbridge at ws://localhost:9090".** The rig is not running, or its rosbridge is elsewhere: start it, or set `VOICEBRIDGE_ROSBRIDGE`.
 
 **The voice says "I could not read the command back exactly, so I cancelled it."** The LLM did not say the read-back word for word, so the bridge cancelled the command: nothing moved. Say it again. If it happens often, the model is too small to repeat a sentence reliably.
+
+**The speech server stops with `cudaMalloc failed: out of memory`.** The LLM took the GPU before the voice could load: use an LLM entry that leaves room, as `azllm-voice` does, see [Start the LLM](#start-the-llm).
 
 **A yes does nothing.** The answer must be made only of the confirming words, e.g. "yes" or "yes, go ahead", within 20 seconds of the end of the read-back. "Yes, but faster" is not a yes: it cancels the command, and the LLM hears it as a new request.

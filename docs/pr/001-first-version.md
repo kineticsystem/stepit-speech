@@ -4,8 +4,6 @@
 
 Drive StepIt Macro by voice, safely: every command is read back and runs only after a spoken yes. Build it so that another robot needs only a new robot file.
 
-It follows s2s-ros2, which ran a command as soon as the LLM produced it.
-
 ## Decisions
 
 **The LLM proposes, the bridge decides.** The LLM only turns words into a tool call. The bridge checks the values, reads the command back, checks that the voice said it exactly, and decides yes, no or stop from the transcript with fixed word lists.
