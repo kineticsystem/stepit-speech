@@ -46,74 +46,76 @@ The bridge, `voicebridge`, sits twice in the path of Speech-to-Speech. The brows
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    Browser["Browser demo<br/>microphone and speaker, port 7860"]
-    Bridge["voicebridge<br/>port 8766"]
-    Speech["Speech-to-Speech server<br/>port 8765"]
-    Proxy["voicebridge LLM proxy<br/>port 8767"]
-    LLM["LLM<br/>Bonsai 2 27B on llama.cpp, llama-swap port 8085"]
-    Rosbridge["rosbridge<br/>port 9090"]
-    Robot["The robot<br/>StepIt Commander, the drivers"]
+    Browser(["<b>Browser demo</b><br/>microphone and speaker, port 7860"])
+    Bridge("<b>voicebridge</b><br/>port 8766")
+    Speech("<b>Speech-to-Speech server</b><br/>port 8765")
+    Proxy("<b>voicebridge LLM proxy</b><br/>port 8767")
+    LLM{{"<b>LLM</b><br/>Bonsai 2 27B on llama.cpp,<br/>llama-swap port 8085"}}
+    Rosbridge("<b>rosbridge</b><br/>port 9090")
+    Robot("<b>The robot</b><br/>StepIt Commander, the drivers")
 
-    Browser -- "audio and events" --> Bridge
-    Bridge -- "the same, plus the robot's tools" --> Speech
+    Browser == "audio and events" ==> Bridge
+    Bridge == "the same, plus the robot's tools" ==> Speech
     Speech -- "text" --> Proxy
     Proxy -- "one JSON decision" --> LLM
-    Bridge -- "confirmed commands" --> Rosbridge
-    Rosbridge --> Robot
+    Bridge -. "confirmed commands" .-> Rosbridge
+    Rosbridge -.-> Robot
 
-    classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+
+    class Browser human
+    class Speech voice
+    class Bridge brain
+    class Proxy,LLM mind
+    class Rosbridge,Robot robot
+
+    linkStyle 0,1 stroke:#14b8a6,stroke-width:3px
+    linkStyle 2,3 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 4,5 stroke:#f59e0b,stroke-width:2px
 ```
 
 The LLM only proposes a command. Checking it, reading it back, hearing the yes and running it are done by the bridge, with fixed rules:
