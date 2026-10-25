@@ -48,9 +48,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:

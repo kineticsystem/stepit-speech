@@ -47,9 +47,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -164,12 +167,12 @@ config:
   theme: base
   sequence:
     actorMargin: 24
-    width: 110
+    width: 130
     diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
     messageMargin: 40
-    noteMargin: 16
+    noteMargin: 22
     labelBoxWidth: 56
     labelBoxHeight: 28
     messageFontSize: 16
@@ -231,12 +234,12 @@ config:
   theme: base
   sequence:
     actorMargin: 24
-    width: 110
+    width: 130
     diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
     messageMargin: 40
-    noteMargin: 16
+    noteMargin: 22
     labelBoxWidth: 56
     labelBoxHeight: 28
     messageFontSize: 16
@@ -296,12 +299,12 @@ config:
   theme: base
   sequence:
     actorMargin: 24
-    width: 110
+    width: 130
     diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
     messageMargin: 40
-    noteMargin: 16
+    noteMargin: 22
     labelBoxWidth: 56
     labelBoxHeight: 28
     messageFontSize: 16
@@ -343,7 +346,7 @@ sequenceDiagram
     participant Bridge as voicebridge
     participant Speech as Speech server
     participant Proxy as LLM proxy
-    participant Rosbridge as rosbridge and the rig
+    participant Rosbridge as rosbridge<br/>and the rig
 
     User ->> Browser: "yes"
     Speech ->> Bridge: input_audio_transcription<br/>.completed "Yes."
@@ -387,9 +390,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -494,12 +500,12 @@ config:
   theme: base
   sequence:
     actorMargin: 24
-    width: 110
+    width: 130
     diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
     messageMargin: 40
-    noteMargin: 16
+    noteMargin: 22
     labelBoxWidth: 56
     labelBoxHeight: 28
     messageFontSize: 16
@@ -539,7 +545,7 @@ sequenceDiagram
     participant User
     participant Speech as Speech server
     participant Bridge as voicebridge
-    participant Rig as rosbridge and the rig
+    participant Rig as rosbridge<br/>and the rig
 
     Note over Rig: RotateStageBy<br/>360 degrees, running
     User ->> Speech: "stop!"
@@ -574,9 +580,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -744,9 +753,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -867,9 +879,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -996,9 +1011,12 @@ config:
   theme: base
   flowchart:
     curve: basis
-    padding: 22
+    padding: 12
     nodeSpacing: 46
-    rankSpacing: 58
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
   class:
     padding: 10
   themeVariables:
@@ -1035,13 +1053,13 @@ config:
 ---
 flowchart TB
     Event(["<b>An event from the speech server</b>"])
-    Muted{"Part of a reply<br/>the bridge muted?"}
+    Muted("Part of a reply<br/>the bridge muted?")
     Drop("<b>Dropped</b>")
-    Said{"A transcript<br/>of the user?"}
+    Said("A transcript<br/>of the user?")
     Hear("<b>Forwarded, then:</b><br/>stop, yes, no or other")
-    Call{"A finished call<br/>of a robot command?"}
+    Call("A finished call<br/>of a robot command?")
     Prepare("<b>Hidden; prepared</b><br/>in the background")
-    Part{"Another part<br/>of a robot call?"}
+    Part("Another part<br/>of a robot call?")
     Hide("<b>Hidden</b>")
     Forward("<b>Forwarded to the browser</b>")
 
