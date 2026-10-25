@@ -42,84 +42,8 @@ It is built on [Hugging Face Speech-to-Speech](https://github.com/huggingface/sp
 
 The bridge, `voicebridge`, sits twice in the path of Speech-to-Speech. The browser page connects to the bridge instead of the speech server, and the speech server asks its LLM through the bridge's LLM proxy:
 
-```mermaid
----
-config:
-  theme: base
-  flowchart:
-    curve: basis
-    padding: 12
-    nodeSpacing: 46
-    rankSpacing: 32
-    subGraphTitleMargin:
-      top: 4
-      bottom: 10
-  class:
-    padding: 10
-  themeVariables:
-    lineColor: "#94a3b8"
-    textColor: "#64748b"
-    primaryColor: "#f1f5f9"
-    primaryBorderColor: "#64748b"
-    primaryTextColor: "#0f172a"
-    secondaryColor: "#f1f5f9"
-    secondaryBorderColor: "#64748b"
-    secondaryTextColor: "#0f172a"
-    tertiaryColor: "#f1f5f9"
-    tertiaryBorderColor: "#64748b"
-    tertiaryTextColor: "#0f172a"
-    mainBkg: "#f1f5f9"
-    nodeBorder: "#64748b"
-    nodeTextColor: "#0f172a"
-    classText: "#0f172a"
-    clusterBkg: "transparent"
-    clusterBorder: "#94a3b8"
-    titleColor: "#64748b"
-    edgeLabelBackground: "#ffffff"
-  themeCSS: >
-    .node rect, .node polygon, .node path {
-      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
-    }
-    .node rect { rx: 14px; ry: 14px; }
-    .cluster rect { rx: 18px; ry: 18px; }
-    .edgeLabel, .edgeLabel p, .edgeLabel span {
-      background: #ffffff; color: #475569; border-radius: 999px;
-    }
-    .edgeLabel p { padding: 3px 10px; }
-    .labelBkg { background: transparent !important; fill: none !important; }
----
-flowchart TB
-    Browser(["<b>Browser demo</b><br/>microphone and speaker, port 7860"])
-    Bridge("<b>voicebridge</b><br/>port 8766")
-    Speech("<b>Speech-to-Speech server</b><br/>port 8765")
-    Proxy("<b>voicebridge LLM proxy</b><br/>port 8767")
-    LLM{{"<b>LLM</b><br/>Bonsai 2 27B on llama.cpp,<br/>llama-swap port 8085"}}
-    Rosbridge("<b>rosbridge</b><br/>port 9090")
-    Robot("<b>The robot</b><br/>StepIt Commander, the drivers")
-
-    Browser == "audio and events" ==> Bridge
-    Bridge == "the same, plus the robot's tools" ==> Speech
-    Speech -- "text" --> Proxy
-    Proxy -- "one JSON decision" --> LLM
-    Bridge -. "confirmed commands" .-> Rosbridge
-    Rosbridge -.-> Robot
-
-    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
-    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
-    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
-    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
-    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
-
-    class Browser human
-    class Speech voice
-    class Bridge brain
-    class Proxy,LLM mind
-    class Rosbridge,Robot robot
-
-    linkStyle 0,1 stroke:#14b8a6,stroke-width:3px
-    linkStyle 2,3 stroke:#8b5cf6,stroke-width:2px
-    linkStyle 4,5 stroke:#f59e0b,stroke-width:2px
-```
+<!-- The source is docs/diagrams/overview.mmd: change it, then run bin/render-diagrams.sh. -->
+<p align="center"><img src="docs/diagrams/overview.svg" alt="The browser demo talks to voicebridge, which talks to the Speech-to-Speech server, whose LLM proxy asks the LLM; voicebridge sends confirmed commands through rosbridge to the robot." width="510"></p>
 
 The LLM only proposes a command. Checking it, reading it back, hearing the yes and running it are done by the bridge, with fixed rules:
 
