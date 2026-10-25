@@ -45,81 +45,88 @@ Five programs take part. The bridge is the only one of this project; the others 
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    Browser["Browser demo<br/>microphone and speaker"]
-    Bridge["voicebridge<br/>port 8766"]
-    Speech["Speech-to-Speech server, port 8765<br/>VAD: when we speak<br/>STT: speech to text<br/>TTS: text to speech"]
-    Proxy["voicebridge LLM proxy<br/>port 8767"]
-    LLM["LLM<br/>Bonsai 2 27B on llama.cpp, port 8085"]
-    Rosbridge["rosbridge<br/>port 9090"]
+    Browser(["<b>Browser demo</b><br/>microphone and speaker"])
 
-    subgraph Rig["StepIt Macro"]
-        Commander["StepIt Commander<br/>the objectives"]
-        Drivers["camera, Freezer, stack_state"]
+    Bridge("<b>voicebridge</b><br/>port 8766")
+    Speech("<b>Speech-to-Speech server</b><br/>port 8765<br/>VAD: when we speak<br/>STT: speech to text<br/>TTS: text to speech")
+    Proxy("<b>voicebridge LLM proxy</b><br/>port 8767")
+    LLM{{"<b>LLM</b><br/>Bonsai 2 27B on llama.cpp, port 8085"}}
+    Rosbridge("<b>rosbridge</b><br/>port 9090")
+
+    subgraph Rig["STEPIT MACRO"]
+        Commander("<b>StepIt Commander</b><br/>the objectives")
+        Drivers("<b>camera, Freezer, stack_state</b>")
     end
 
-    Browser -- "audio, events" --> Bridge
-    Bridge -- "audio, events, robot tools" --> Speech
+    Browser == "audio, events" ==> Bridge
+    Bridge == "audio, events, robot tools" ==> Speech
     Speech -- "transcript, tools" --> Proxy
     Proxy -- "a JSON schema of the commands" --> LLM
     LLM -- "one JSON decision" --> Proxy
     Proxy -- "reply or tool call" --> Speech
-    Bridge -- "confirmed commands" --> Rosbridge
-    Rosbridge -- "actions" --> Commander
-    Rosbridge -- "services, topics" --> Drivers
+    Bridge -. "confirmed commands" .-> Rosbridge
+    Rosbridge -. "actions" .-> Commander
+    Rosbridge -. "services, topics" .-> Drivers
 
-    classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class Browser human
+    class Speech voice
+    class Bridge brain
+    class Proxy,LLM mind
+    class Rosbridge,Commander,Drivers robot
+
+    style Rig fill:#f59e0b12,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:6 5,color:#d97706
+
+    linkStyle 0,1 stroke:#14b8a6,stroke-width:3px
+    linkStyle 2,3,4,5 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 6,7,8 stroke:#f59e0b,stroke-width:2px
 ```
 
 The speech server and the browser speak the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime): JSON events over a WebSocket, e.g. `session.update` from the browser, `response.created`, `conversation.item.input_audio_transcription.completed` (what we said) and `response.output_item.done` (a finished tool call) from the server. The bridge sits in the middle of that WebSocket. To the browser it looks like the server; to the server it looks like the browser. It passes almost every event through unchanged.
@@ -149,99 +156,206 @@ In plain words, this is what happens when we say "rotate the rig 10 degrees left
 7. The bridge sends the goal to the commander through rosbridge and waits for its end.
 8. It asks the voice to say the outcome: "The stage turned 10 degrees counter-clockwise."
 
-The same, as the messages between the programs:
+The same, as the messages between the programs, in three steps. First, the request becomes a proposed command, steps 1 and 2:
 
 ```mermaid
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
-  flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
-  class:
-    padding: 16
   sequence:
+    actorMargin: 24
+    width: 110
+    diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
-    noteMargin: 28
     messageMargin: 40
-    actorMargin: 60
+    noteMargin: 16
     labelBoxWidth: 56
     labelBoxHeight: 28
+    messageFontSize: 16
+    actorFontSize: 16
+    noteFontSize: 15
+    wrap: false
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
+    textColor: "#8b5cf6"
+    actorBkg: "#ede9fe"
+    actorBorder: "#7c3aed"
+    actorTextColor: "#4c1d95"
+    actorLineColor: "#a78bfa"
     signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
-    clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    signalTextColor: "#6e7781"
+    labelBoxBkgColor: "#ccfbf1"
+    labelBoxBorderColor: "#0d9488"
+    labelTextColor: "#134e4a"
+    loopTextColor: "#0d9488"
+    noteBkgColor: "#fef3c7"
+    noteBorderColor: "#d97706"
+    noteTextColor: "#78350f"
+    activationBkgColor: "#c4b5fd"
+    activationBorderColor: "#7c3aed"
+    mainBkg: "#ede9fe"
+    nodeBorder: "#7c3aed"
+    secondaryColor: "#ede9fe"
+    secondaryBorderColor: "#7c3aed"
+    secondaryTextColor: "#4c1d95"
+    tertiaryColor: "#ede9fe"
+    tertiaryBorderColor: "#7c3aed"
+    tertiaryTextColor: "#4c1d95"
+  themeCSS: >
+    .actor { filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18)); }
+    rect.actor { rx: 12px; ry: 12px; }
 ---
 sequenceDiagram
-    actor User
+    participant User
     participant Browser
     participant Bridge as voicebridge
     participant Speech as Speech server
     participant Proxy as LLM proxy
     participant LLM
-    participant Rosbridge as rosbridge and the rig
 
-    User ->> Browser: "rotate the rig 10 degrees left"
+    User ->> Browser: "rotate the rig<br/>10 degrees left"
     Browser ->> Bridge: audio
     Bridge ->> Speech: audio
-    Speech ->> Proxy: chat completion, the transcript and the tools
-    Proxy ->> LLM: the same, with a JSON schema of the commands
-    LLM -->> Proxy: {"command": "rotate_stage", ...}
-    Proxy -->> Speech: tool call rotate_stage(10, counter-clockwise)
-    Speech ->> Bridge: response.output_item.done, the tool call
+    Speech ->> Proxy: chat completion,<br/>the transcript and the tools
+    Proxy ->> LLM: the same, with<br/>a JSON schema<br/>of the commands
+    LLM -->> Proxy: {"command":<br/>"rotate_stage", ...}
+    Proxy -->> Speech: tool call rotate_stage<br/>(10, counter-clockwise)
+    Speech ->> Bridge: response.output_item<br/>.done, the tool call
+```
+
+Then the bridge reads it back, steps 3 to 5:
+
+```mermaid
+---
+config:
+  theme: base
+  sequence:
+    actorMargin: 24
+    width: 110
+    diagramMarginX: 10
+    boxMargin: 12
+    boxTextMargin: 8
+    messageMargin: 40
+    noteMargin: 16
+    labelBoxWidth: 56
+    labelBoxHeight: 28
+    messageFontSize: 16
+    actorFontSize: 16
+    noteFontSize: 15
+    wrap: false
+  themeVariables:
+    textColor: "#8b5cf6"
+    actorBkg: "#ede9fe"
+    actorBorder: "#7c3aed"
+    actorTextColor: "#4c1d95"
+    actorLineColor: "#a78bfa"
+    signalColor: "#8b949e"
+    signalTextColor: "#6e7781"
+    labelBoxBkgColor: "#ccfbf1"
+    labelBoxBorderColor: "#0d9488"
+    labelTextColor: "#134e4a"
+    loopTextColor: "#0d9488"
+    noteBkgColor: "#fef3c7"
+    noteBorderColor: "#d97706"
+    noteTextColor: "#78350f"
+    activationBkgColor: "#c4b5fd"
+    activationBorderColor: "#7c3aed"
+    mainBkg: "#ede9fe"
+    nodeBorder: "#7c3aed"
+    secondaryColor: "#ede9fe"
+    secondaryBorderColor: "#7c3aed"
+    secondaryTextColor: "#4c1d95"
+    tertiaryColor: "#ede9fe"
+    tertiaryBorderColor: "#7c3aed"
+    tertiaryTextColor: "#4c1d95"
+  themeCSS: >
+    .actor { filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18)); }
+    rect.actor { rx: 12px; ry: 12px; }
+---
+sequenceDiagram
+    participant Browser
+    participant Bridge as voicebridge
+    participant Speech as Speech server
+    participant Proxy as LLM proxy
+
     Note over Bridge: hidden from the browser.<br/>Check the values, render<br/>the read-back and the request.
-    Bridge ->> Speech: function_call_output "Not done yet..."
-    Bridge ->> Speech: response.create, the read-back in its instructions
-    Speech ->> Proxy: chat completion, with the read-back
-    Proxy -->> Speech: "Rotating the stage 10 degrees counter-clockwise. Confirm?"
+    Bridge ->> Speech: function_call_output<br/>"Not done yet..."
+    Bridge ->> Speech: response.create, the<br/>read-back in its instructions
+    Speech ->> Proxy: chat completion,<br/>with the read-back
+    Proxy -->> Speech: "Rotating the stage 10 degrees<br/>counter-clockwise. Confirm?"
     Speech ->> Browser: the read-back, spoken
-    Speech ->> Bridge: response.output_audio_transcript.done
+    Speech ->> Bridge: response.output_audio<br/>_transcript.done
     Note over Bridge: the same sentence: armed
+```
+
+Last, the yes and the run, steps 6 to 8:
+
+```mermaid
+---
+config:
+  theme: base
+  sequence:
+    actorMargin: 24
+    width: 110
+    diagramMarginX: 10
+    boxMargin: 12
+    boxTextMargin: 8
+    messageMargin: 40
+    noteMargin: 16
+    labelBoxWidth: 56
+    labelBoxHeight: 28
+    messageFontSize: 16
+    actorFontSize: 16
+    noteFontSize: 15
+    wrap: false
+  themeVariables:
+    textColor: "#8b5cf6"
+    actorBkg: "#ede9fe"
+    actorBorder: "#7c3aed"
+    actorTextColor: "#4c1d95"
+    actorLineColor: "#a78bfa"
+    signalColor: "#8b949e"
+    signalTextColor: "#6e7781"
+    labelBoxBkgColor: "#ccfbf1"
+    labelBoxBorderColor: "#0d9488"
+    labelTextColor: "#134e4a"
+    loopTextColor: "#0d9488"
+    noteBkgColor: "#fef3c7"
+    noteBorderColor: "#d97706"
+    noteTextColor: "#78350f"
+    activationBkgColor: "#c4b5fd"
+    activationBorderColor: "#7c3aed"
+    mainBkg: "#ede9fe"
+    nodeBorder: "#7c3aed"
+    secondaryColor: "#ede9fe"
+    secondaryBorderColor: "#7c3aed"
+    secondaryTextColor: "#4c1d95"
+    tertiaryColor: "#ede9fe"
+    tertiaryBorderColor: "#7c3aed"
+    tertiaryTextColor: "#4c1d95"
+  themeCSS: >
+    .actor { filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18)); }
+    rect.actor { rx: 12px; ry: 12px; }
+---
+sequenceDiagram
+    participant User
+    participant Browser
+    participant Bridge as voicebridge
+    participant Speech as Speech server
+    participant Proxy as LLM proxy
+    participant Rosbridge as rosbridge and the rig
+
     User ->> Browser: "yes"
-    Speech ->> Bridge: input_audio_transcription.completed "Yes."
+    Speech ->> Bridge: input_audio_transcription<br/>.completed "Yes."
     Note over Bridge: only confirming words: run it
     Speech ->> Proxy: chat completion, "Yes."
-    Proxy -->> Speech: nothing: the bridge answers it
+    Proxy -->> Speech: nothing: the<br/>bridge answers it
     Bridge ->> Speech: response.cancel
-    Bridge ->> Rosbridge: send_action_goal RotateStageBy {deg: -10.0}
-    Rosbridge -->> Bridge: action_result, status 4, SUCCESS
+    Bridge ->> Rosbridge: send_action_goal<br/>RotateStageBy {deg: -10.0}
+    Rosbridge -->> Bridge: action_result,<br/>status 4, SUCCESS
     Bridge ->> Speech: response.create, the outcome
-    Speech ->> Proxy: chat completion, with the outcome
-    Proxy -->> Speech: "The stage turned 10 degrees counter-clockwise."
+    Speech ->> Proxy: chat completion,<br/>with the outcome
+    Proxy -->> Speech: "The stage turned 10<br/>degrees counter-clockwise."
     Speech ->> Browser: the outcome, spoken
 ```
 
@@ -271,73 +385,78 @@ The pending command lives in a `Confirmation` object, in [`confirmation.py`](../
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    Idle(["Idle<br/>no command waits"])
-    ReadingBack(["ReadingBack<br/>the voice reads it back"])
-    Armed(["Armed<br/>waits 20 s for a yes"])
-    Run["The command runs"]
-    Dropped["Dropped<br/>nothing runs"]
+    Idle(["<b>Idle</b><br/>no command waits"])
+    ReadingBack(["<b>ReadingBack</b><br/>the voice reads it back"])
+    Armed(["<b>Armed</b><br/>waits 20 s for a yes"])
+    Run("<b>The command runs</b>")
+    Dropped("<b>Dropped</b><br/>nothing runs")
 
     Idle -- "propose a checked command" --> ReadingBack
     ReadingBack -- "the voice said the sentence exactly" --> Armed
     ReadingBack -- "the voice said something else,<br/>or the user spoke over it" --> Dropped
-    Armed -- "yes, within 20 s" --> Run
+    Armed == "yes, within 20 s" ==> Run
     Armed -- "yes too late, no, stop,<br/>or anything else" --> Dropped
-    Run -- "back to" --> Idle
-    Dropped -- "back to" --> Idle
+    Run -. "back to" .-> Idle
+    Dropped -. "back to" .-> Idle
 
-    classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class Idle ext
+    class ReadingBack voice
+    class Armed mind
+    class Run brain
+    class Dropped human
+
+    linkStyle 0,1 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 2,4 stroke:#f43f5e,stroke-width:2px
+    linkStyle 3 stroke:#7c3aed,stroke-width:3px
+    linkStyle 5,6 stroke:#94a3b8,stroke-width:2px
 ```
 
 Every way out of `Armed` goes back to `Idle`, so a command is confirmed once at most. Only one arrow runs a command, and it starts from `Armed`. A newer command, proposed while one is read back or armed, replaces it and starts its own read-back. The object does no I/O and takes its clock as an argument, so the tests move time forward by hand.
@@ -373,73 +492,65 @@ The robot file lists the stop words, e.g. `stop`, `halt`, `abort`, `freeze`, and
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
-  flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
-  class:
-    padding: 16
   sequence:
+    actorMargin: 24
+    width: 110
+    diagramMarginX: 10
     boxMargin: 12
     boxTextMargin: 8
-    noteMargin: 28
     messageMargin: 40
-    actorMargin: 60
+    noteMargin: 16
     labelBoxWidth: 56
     labelBoxHeight: 28
+    messageFontSize: 16
+    actorFontSize: 16
+    noteFontSize: 15
+    wrap: false
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
+    textColor: "#8b5cf6"
+    actorBkg: "#ede9fe"
+    actorBorder: "#7c3aed"
+    actorTextColor: "#4c1d95"
+    actorLineColor: "#a78bfa"
     signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
-    clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    signalTextColor: "#6e7781"
+    labelBoxBkgColor: "#ccfbf1"
+    labelBoxBorderColor: "#0d9488"
+    labelTextColor: "#134e4a"
+    loopTextColor: "#0d9488"
+    noteBkgColor: "#fef3c7"
+    noteBorderColor: "#d97706"
+    noteTextColor: "#78350f"
+    activationBkgColor: "#c4b5fd"
+    activationBorderColor: "#7c3aed"
+    mainBkg: "#ede9fe"
+    nodeBorder: "#7c3aed"
+    secondaryColor: "#ede9fe"
+    secondaryBorderColor: "#7c3aed"
+    secondaryTextColor: "#4c1d95"
+    tertiaryColor: "#ede9fe"
+    tertiaryBorderColor: "#7c3aed"
+    tertiaryTextColor: "#4c1d95"
+  themeCSS: >
+    .actor { filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18)); }
+    rect.actor { rx: 12px; ry: 12px; }
 ---
 sequenceDiagram
-    actor User
+    participant User
     participant Speech as Speech server
     participant Bridge as voicebridge
     participant Rig as rosbridge and the rig
 
-    Note over Rig: RotateStageBy 360 degrees, running
+    Note over Rig: RotateStageBy<br/>360 degrees, running
     User ->> Speech: "stop!"
-    Speech ->> Bridge: input_audio_transcription.completed "Stop!"
-    Note over Bridge: only stop words: no LLM, no confirmation
+    Speech ->> Bridge: input_audio_transcription<br/>.completed "Stop!"
+    Note over Bridge: only stop words:<br/>no LLM, no confirmation
     Bridge ->> Speech: response.cancel
-    Bridge ->> Rig: call_service .../_action/cancel_goal
-    Rig -->> Bridge: the goal is cancelled, the stage brakes
+    Bridge ->> Rig: call_service<br/>.../_action/cancel_goal
+    Rig -->> Bridge: the goal is cancelled,<br/>the stage brakes
     Bridge ->> Speech: response.create, "Stopped."
-    Rig -->> Bridge: action_result of the move, status 5
-    Bridge ->> Speech: response.create, "That did not work: it was stopped before the end."
+    Rig -->> Bridge: action_result of<br/>the move, status 5
+    Bridge ->> Speech: response.create, "That did<br/>not work: it was stopped<br/>before the end."
 ```
 
 On the rig, with its fake motors, the commander logged the cancel 1.5 seconds after the move started, and halted the tree.
@@ -461,56 +572,44 @@ The loader turns the file into these objects, in [`catalogue.py`](../src/voicebr
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 classDiagram
     direction TB
@@ -567,6 +666,14 @@ classDiagram
     Command *-- Use : read
     Command *-- Example : examples
     Use --> Call : names
+
+    style Catalogue fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    style ConfirmationSettings fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    style Command fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Parameter fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Use fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Example fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Call fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
 ```
 
 ### Every Key of a Command
@@ -635,81 +742,69 @@ The imports, as they are:
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    subgraph Tools
-        cli
-        docs
+    subgraph Tools["TOOLS"]
+        cli("<b>cli</b>")
+        docs("<b>docs</b>")
     end
-    subgraph Conversation
-        server
-        session
-        llmproxy
+    subgraph Conversation["CONVERSATION"]
+        server("<b>server</b>")
+        session("<b>session</b>")
+        llmproxy("<b>llmproxy</b>")
     end
-    subgraph Robot
-        planner
-        robot
-        prompt
+    subgraph Robot["ROBOT"]
+        planner("<b>planner</b>")
+        robot("<b>robot</b>")
+        prompt("<b>prompt</b>")
     end
-    subgraph Model
-        catalogue
-        confirmation
-        phrases
+    subgraph Model["MODEL"]
+        catalogue("<b>catalogue</b>")
+        confirmation("<b>confirmation</b>")
+        phrases("<b>phrases</b>")
     end
-    subgraph Foundation
-        templating
-        rosbridge
-        realtime
+    subgraph Foundation["FOUNDATION"]
+        templating("<b>templating</b>")
+        rosbridge("<b>rosbridge</b>")
+        realtime("<b>realtime</b>")
     end
 
     cli --> server
@@ -734,7 +829,30 @@ flowchart TB
     phrases --> catalogue
     catalogue --> templating
 
-    classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class cli,docs ext
+    class server,session,llmproxy voice
+    class planner,robot,prompt robot
+    class catalogue,confirmation,phrases mind
+    class templating,rosbridge,realtime data
+
+    style Tools fill:#64748b12,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 5,color:#64748b
+    style Conversation fill:#14b8a612,stroke:#14b8a6,stroke-width:1.5px,stroke-dasharray:6 5,color:#0d9488
+    style Robot fill:#f59e0b12,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:6 5,color:#d97706
+    style Model fill:#8b5cf612,stroke:#8b5cf6,stroke-width:1.5px,stroke-dasharray:6 5,color:#7c3aed
+    style Foundation fill:#3b82f612,stroke:#3b82f6,stroke-width:1.5px,stroke-dasharray:6 5,color:#2563eb
+
+    linkStyle 0,1,4,5 stroke:#64748b,stroke-width:2px
+    linkStyle 2,3,6,7,8,9,10,11 stroke:#14b8a6,stroke-width:2px
+    linkStyle 12,13,14,15,16,17 stroke:#f59e0b,stroke-width:2px
+    linkStyle 18,19,20 stroke:#8b5cf6,stroke-width:2px
 ```
 
 Some edges are left out for clarity, e.g. `cli` imports most modules, `session` also imports `catalogue` and `robot`, and `llmproxy` imports `catalogue`; `session` and `llmproxy` share only `realtime.exact_speech` and `scripted_sentence`, the tags of a sentence of the bridge; none goes up a layer, and there is no cycle. One edge is worth knowing: `robot` holds both the `Robot` port and its rosbridge implementation, so `session` imports, through it, the module of the rosbridge client, without using it. The session only ever calls `Robot.execute`, and the tests give it a fake.
@@ -747,56 +865,44 @@ Once `voicebridge serve` runs, these objects exist. One `Catalogue`, one `Rosbri
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 classDiagram
     direction TB
@@ -858,6 +964,18 @@ classDiagram
     Planner --> Robot
     Robot <|.. RosbridgeRobot
     RosbridgeRobot --> Rosbridge
+
+    style BridgeServer fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    style LlmProxy fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    style Guard fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    style Session fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    style Planner fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Confirmation fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style PhraseMatcher fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style RosbridgeRobot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style Rosbridge fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style Catalogue fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
 ```
 
 Three small values travel between them. A `Request` is a call with its templates filled in: exactly what goes to rosbridge. A `Prepared` is a command with everything decided: its checked arguments, its read-back sentence and its `Request`. An `Outcome` is how a request ended: ok or not, the robot's message, and, for a read, its value.
@@ -876,68 +994,56 @@ From the speech server, each event goes through these questions, in order:
 ---
 config:
   theme: base
-  themeCSS: ".edgeLabel p { padding: 4px 10px; }"
   flowchart:
-    padding: 20
-    nodeSpacing: 40
-    rankSpacing: 50
+    curve: basis
+    padding: 22
+    nodeSpacing: 46
+    rankSpacing: 58
   class:
-    padding: 16
-  sequence:
-    boxMargin: 12
-    boxTextMargin: 8
-    noteMargin: 28
-    messageMargin: 40
-    actorMargin: 60
-    labelBoxWidth: 56
-    labelBoxHeight: 28
+    padding: 10
   themeVariables:
-    primaryColor: "#3b6fb6"
-    primaryTextColor: "#ffffff"
-    primaryBorderColor: "#2c5590"
-    lineColor: "#8b949e"
-    textColor: "#4d86d6"
-    actorBkg: "#3b6fb6"
-    actorBorder: "#2c5590"
-    actorTextColor: "#ffffff"
-    actorLineColor: "#8b949e"
-    signalColor: "#8b949e"
-    signalTextColor: "#4d86d6"
-    noteBkgColor: "#3b6fb6"
-    noteTextColor: "#ffffff"
-    noteBorderColor: "#2c5590"
-    secondaryColor: "#3b6fb6"
-    tertiaryColor: "#3b6fb6"
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
     clusterBkg: "transparent"
-    clusterBorder: "#8b949e"
-    titleColor: "#4d86d6"
-    edgeLabelBackground: "#3b6fb6"
-    classText: "#ffffff"
-    labelBoxBkgColor: "#3b6fb6"
-    labelBoxBorderColor: "#2c5590"
-    labelTextColor: "#ffffff"
-    loopTextColor: "#4d86d6"
-    mainBkg: "#3b6fb6"
-    nodeBorder: "#2c5590"
-    nodeTextColor: "#ffffff"
-    secondaryBorderColor: "#2c5590"
-    secondaryTextColor: "#ffffff"
-    tertiaryBorderColor: "#2c5590"
-    tertiaryTextColor: "#ffffff"
-    errorBkgColor: "#3b6fb6"
-    errorTextColor: "#ffffff"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    Event["An event from the speech server"]
+    Event(["<b>An event from the speech server</b>"])
     Muted{"Part of a reply<br/>the bridge muted?"}
-    Drop["Dropped"]
+    Drop("<b>Dropped</b>")
     Said{"A transcript<br/>of the user?"}
-    Hear["Forwarded, then:<br/>stop, yes, no or other"]
+    Hear("<b>Forwarded, then:</b><br/>stop, yes, no or other")
     Call{"A finished call<br/>of a robot command?"}
-    Prepare["Hidden; prepared<br/>in the background"]
+    Prepare("<b>Hidden; prepared</b><br/>in the background")
     Part{"Another part<br/>of a robot call?"}
-    Hide["Hidden"]
-    Forward["Forwarded to the browser"]
+    Hide("<b>Hidden</b>")
+    Forward("<b>Forwarded to the browser</b>")
 
     Event --> Muted
     Muted -- "yes" --> Drop
@@ -949,7 +1055,26 @@ flowchart TB
     Part -- "yes" --> Hide
     Part -- "no" --> Forward
 
-    classDef default fill:#3b6fb6,stroke:#2c5590,color:#ffffff
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class Event voice
+    class Muted,Said,Call,Part mind
+    class Drop human
+    class Hear,Forward voice
+    class Prepare brain
+    class Hide ext
+
+    linkStyle 0,2,4,6,8 stroke:#94a3b8,stroke-width:2px
+    linkStyle 1 stroke:#f43f5e,stroke-width:2px
+    linkStyle 3 stroke:#14b8a6,stroke-width:2px
+    linkStyle 5 stroke:#7c3aed,stroke-width:3px
+    linkStyle 7 stroke:#64748b,stroke-width:2px
 ```
 
 A robot call is hidden in every form the server sends it: `response.output_item.added` and `.done`, the argument deltas, which name neither the tool nor the item but only its ids, which the session remembers, and the copy inside `response.done`. The browser's own tool executor knows only its own tools: it would answer "unknown tool", racing the bridge.
