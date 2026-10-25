@@ -38,7 +38,7 @@ A test that talks to a robot uses the fakes of `tests/conftest.py`, never the re
 - ruff, line length 120 (`pyproject.toml`). Python 3.10 or newer.
 - The robot file is for people who do not know Python: keep its templates short, add a filter to `templating.py` rather than a long expression, and keep the loader's error messages pointing at the key that is wrong.
 - Docs follow the write-docs house style; British spelling. Mermaid diagrams follow the beautiful-mermaid-diagrams skill instead of write-docs' blue style: colors by role, compact, readable in light and dark mode.
-- A diagram shown as an image has its source in `docs/diagrams/<name>.mmd`: change the source, run `bin/render-diagrams.sh` (outside the container: it needs Node.js and Chrome), and commit both. `tests/test_diagrams.py` fails when an SVG is older than its source. The README's diagram is one; the architecture document's are still Mermaid blocks.
+- A diagram shown as an image has its source in `docs/diagrams/<name>.mmd`: change the source, run `bin/render-diagrams.sh` (outside the container: it needs Node.js and Chrome), and commit both. `tests/test_diagrams.py` fails when an SVG is older than its source. The diagrams of the README and of the architecture document are all shown this way.
 
 ## Pull Request Notes
 

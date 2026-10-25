@@ -1,0 +1,90 @@
+---
+config:
+  theme: base
+  fontFamily: "Arial, Helvetica, sans-serif"
+  flowchart:
+    curve: basis
+    padding: 12
+    nodeSpacing: 46
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
+  class:
+    padding: 10
+  themeVariables:
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
+    clusterBkg: "transparent"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    svg, .label, .nodeLabel, .edgeLabel, foreignObject div { font-family: Arial, Helvetica, sans-serif; }
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
+---
+flowchart TB
+    Browser(["<b>Browser demo</b><br/>microphone and speaker"])
+
+    Bridge("<b>voicebridge</b><br/>port 8766")
+    Speech("<b>Speech-to-Speech server</b><br/>port 8765<br/>VAD: when we speak<br/>STT: speech to text<br/>TTS: text to speech")
+    Proxy("<b>voicebridge LLM proxy</b><br/>port 8767")
+    LLM{{"<b>LLM</b><br/>Bonsai 2 27B on llama.cpp, port 8085"}}
+    Rosbridge("<b>rosbridge</b><br/>port 9090")
+
+    subgraph Rig["STEPIT MACRO"]
+        Commander("<b>StepIt Commander</b><br/>the objectives")
+        Drivers("<b>camera, Freezer, stack_state</b>")
+    end
+
+    Browser == "audio, events" ==> Bridge
+    Bridge == "audio, events, robot tools" ==> Speech
+    Speech -- "transcript, tools" --> Proxy
+    Proxy -- "a JSON schema of the commands" --> LLM
+    LLM -- "one JSON decision" --> Proxy
+    Proxy -- "reply or tool call" --> Speech
+    Bridge -. "confirmed commands" .-> Rosbridge
+    Rosbridge -. "actions" .-> Commander
+    Rosbridge -. "services, topics" .-> Drivers
+
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class Browser human
+    class Speech voice
+    class Bridge brain
+    class Proxy,LLM mind
+    class Rosbridge,Commander,Drivers robot
+
+    style Rig fill:#f59e0b12,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:6 5,color:#d97706
+
+    linkStyle 0,1 stroke:#14b8a6,stroke-width:3px
+    linkStyle 2,3,4,5 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 6,7,8 stroke:#f59e0b,stroke-width:2px

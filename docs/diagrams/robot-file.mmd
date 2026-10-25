@@ -1,0 +1,110 @@
+---
+config:
+  theme: base
+  fontFamily: "Arial, Helvetica, sans-serif"
+  flowchart:
+    curve: basis
+    padding: 12
+    nodeSpacing: 46
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
+  class:
+    padding: 10
+  themeVariables:
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
+    clusterBkg: "transparent"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    svg, .label, .nodeLabel, .edgeLabel, foreignObject div { font-family: Arial, Helvetica, sans-serif; }
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
+---
+classDiagram
+    direction TB
+    class Catalogue {
+        name
+        description
+        rosbridge_url
+        tool_specs()
+    }
+    class ConfirmationSettings {
+        timeout_s
+        prompt
+        confirm, decline, stop, fillers
+        stop_command
+    }
+    class Command {
+        name
+        description
+        say
+        confirm
+        started, done, failed
+        tool_spec()
+        check_arguments(raw)
+    }
+    class Parameter {
+        name
+        type
+        choices, minimum, maximum
+        optional
+        check(value)
+    }
+    class Use {
+        call
+        arguments
+    }
+    class Example {
+        phrase
+        expect
+        reads
+    }
+    class Call {
+        name
+        kind: action, service, topic, publish
+        target, type
+        request
+        success, message, result
+        timeout_s
+    }
+    Catalogue *-- ConfirmationSettings : confirmation
+    Catalogue *-- Command : commands
+    Catalogue *-- Call : calls
+    Command *-- Parameter : parameters
+    Command *-- Use : run, at most one
+    Command *-- Use : read
+    Command *-- Example : examples
+    Use --> Call : names
+
+    style Catalogue fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    style ConfirmationSettings fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    style Command fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Parameter fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Use fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Example fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    style Call fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f

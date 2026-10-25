@@ -1,0 +1,64 @@
+---
+config:
+  theme: base
+  fontFamily: "Arial, Helvetica, sans-serif"
+  sequence:
+    actorMargin: 24
+    width: 130
+    diagramMarginX: 10
+    boxMargin: 12
+    boxTextMargin: 8
+    messageMargin: 40
+    noteMargin: 22
+    labelBoxWidth: 56
+    labelBoxHeight: 28
+    messageFontSize: 16
+    actorFontSize: 16
+    noteFontSize: 15
+    wrap: false
+  themeVariables:
+    textColor: "#8b5cf6"
+    actorBkg: "#ede9fe"
+    actorBorder: "#7c3aed"
+    actorTextColor: "#4c1d95"
+    actorLineColor: "#a78bfa"
+    signalColor: "#8b949e"
+    signalTextColor: "#6e7781"
+    labelBoxBkgColor: "#ccfbf1"
+    labelBoxBorderColor: "#0d9488"
+    labelTextColor: "#134e4a"
+    loopTextColor: "#0d9488"
+    noteBkgColor: "#fef3c7"
+    noteBorderColor: "#d97706"
+    noteTextColor: "#78350f"
+    activationBkgColor: "#c4b5fd"
+    activationBorderColor: "#7c3aed"
+    mainBkg: "#ede9fe"
+    nodeBorder: "#7c3aed"
+    secondaryColor: "#ede9fe"
+    secondaryBorderColor: "#7c3aed"
+    secondaryTextColor: "#4c1d95"
+    tertiaryColor: "#ede9fe"
+    tertiaryBorderColor: "#7c3aed"
+    tertiaryTextColor: "#4c1d95"
+  themeCSS: >
+    svg, .label, .nodeLabel, .edgeLabel, foreignObject div { font-family: Arial, Helvetica, sans-serif; }
+    .actor { filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18)); }
+    rect.actor { rx: 12px; ry: 12px; }
+---
+sequenceDiagram
+    participant User
+    participant Speech as Speech server
+    participant Bridge as voicebridge
+    participant Rig as rosbridge<br/>and the rig
+
+    Note over Rig: RotateStageBy<br/>360 degrees, running
+    User ->> Speech: "stop!"
+    Speech ->> Bridge: input_audio_transcription<br/>.completed "Stop!"
+    Note over Bridge: only stop words:<br/>no LLM, no confirmation
+    Bridge ->> Speech: response.cancel
+    Bridge ->> Rig: call_service<br/>.../_action/cancel_goal
+    Rig -->> Bridge: the goal is cancelled,<br/>the stage brakes
+    Bridge ->> Speech: response.create, "Stopped."
+    Rig -->> Bridge: action_result of<br/>the move, status 5
+    Bridge ->> Speech: response.create, "That did<br/>not work: it was stopped<br/>before the end."

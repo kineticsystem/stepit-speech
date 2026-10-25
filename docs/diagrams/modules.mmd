@@ -1,0 +1,119 @@
+---
+config:
+  theme: base
+  fontFamily: "Arial, Helvetica, sans-serif"
+  flowchart:
+    curve: basis
+    padding: 12
+    nodeSpacing: 46
+    rankSpacing: 32
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
+  class:
+    padding: 10
+  themeVariables:
+    lineColor: "#94a3b8"
+    textColor: "#64748b"
+    primaryColor: "#f1f5f9"
+    primaryBorderColor: "#64748b"
+    primaryTextColor: "#0f172a"
+    secondaryColor: "#f1f5f9"
+    secondaryBorderColor: "#64748b"
+    secondaryTextColor: "#0f172a"
+    tertiaryColor: "#f1f5f9"
+    tertiaryBorderColor: "#64748b"
+    tertiaryTextColor: "#0f172a"
+    mainBkg: "#f1f5f9"
+    nodeBorder: "#64748b"
+    nodeTextColor: "#0f172a"
+    classText: "#0f172a"
+    clusterBkg: "transparent"
+    clusterBorder: "#94a3b8"
+    titleColor: "#64748b"
+    edgeLabelBackground: "#ffffff"
+  themeCSS: >
+    svg, .label, .nodeLabel, .edgeLabel, foreignObject div { font-family: Arial, Helvetica, sans-serif; }
+    .node rect, .node polygon, .node path {
+      filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.18));
+    }
+    .node rect { rx: 14px; ry: 14px; }
+    .cluster rect { rx: 18px; ry: 18px; }
+    .edgeLabel, .edgeLabel p, .edgeLabel span {
+      background: #ffffff; color: #475569; border-radius: 999px;
+    }
+    .edgeLabel p { padding: 3px 10px; }
+    .labelBkg { background: transparent !important; fill: none !important; }
+---
+flowchart TB
+    subgraph Tools["TOOLS"]
+        cli("<b>cli</b>")
+        docs("<b>docs</b>")
+    end
+    subgraph Conversation["CONVERSATION"]
+        server("<b>server</b>")
+        session("<b>session</b>")
+        llmproxy("<b>llmproxy</b>")
+    end
+    subgraph Robot["ROBOT"]
+        planner("<b>planner</b>")
+        robot("<b>robot</b>")
+        prompt("<b>prompt</b>")
+    end
+    subgraph Model["MODEL"]
+        catalogue("<b>catalogue</b>")
+        confirmation("<b>confirmation</b>")
+        phrases("<b>phrases</b>")
+    end
+    subgraph Foundation["FOUNDATION"]
+        templating("<b>templating</b>")
+        rosbridge("<b>rosbridge</b>")
+        realtime("<b>realtime</b>")
+    end
+
+    cli --> server
+    cli --> llmproxy
+    llmproxy --> phrases
+    llmproxy --> realtime
+    cli --> docs
+    docs --> planner
+    server --> session
+    session --> planner
+    session --> confirmation
+    session --> phrases
+    session --> prompt
+    session --> realtime
+    planner --> robot
+    planner --> catalogue
+    robot --> catalogue
+    robot --> rosbridge
+    robot --> templating
+    prompt --> catalogue
+    confirmation --> phrases
+    phrases --> catalogue
+    catalogue --> templating
+
+    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
+    classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
+
+    class cli,docs ext
+    class server,session,llmproxy voice
+    class planner,robot,prompt robot
+    class catalogue,confirmation,phrases mind
+    class templating,rosbridge,realtime data
+
+    style Tools fill:#64748b12,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 5,color:#64748b
+    style Conversation fill:#14b8a612,stroke:#14b8a6,stroke-width:1.5px,stroke-dasharray:6 5,color:#0d9488
+    style Robot fill:#f59e0b12,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:6 5,color:#d97706
+    style Model fill:#8b5cf612,stroke:#8b5cf6,stroke-width:1.5px,stroke-dasharray:6 5,color:#7c3aed
+    style Foundation fill:#3b82f612,stroke:#3b82f6,stroke-width:1.5px,stroke-dasharray:6 5,color:#2563eb
+
+    linkStyle 0,1,4,5 stroke:#64748b,stroke-width:2px
+    linkStyle 2,3,6,7,8,9,10,11 stroke:#14b8a6,stroke-width:2px
+    linkStyle 12,13,14,15,16,17 stroke:#f59e0b,stroke-width:2px
+    linkStyle 18,19,20 stroke:#8b5cf6,stroke-width:2px
