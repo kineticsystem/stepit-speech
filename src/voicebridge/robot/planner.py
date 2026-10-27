@@ -22,9 +22,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from voicebridge.catalogue import ArgumentError, Catalogue, Command, Use
-from voicebridge.robot import Outcome, Request, Robot, render_request
-from voicebridge.templating import TemplateError, evaluate, render
+from voicebridge.robot.request import Outcome, Request, Robot, render_request
+from voicebridge.robotfile.model import ArgumentError, Catalogue, Command, Use
+from voicebridge.robotfile.templating import TemplateError, evaluate, render
 
 log = logging.getLogger("voicebridge.planner")
 

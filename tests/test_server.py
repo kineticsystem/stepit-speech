@@ -11,11 +11,11 @@ from typing import Any
 import websockets
 from conftest import ARM
 
-from voicebridge.catalogue import load
-from voicebridge.realtime import scripted_sentence
-from voicebridge.robot import RosbridgeRobot
-from voicebridge.rosbridge import Rosbridge
-from voicebridge.server import BridgeServer
+from voicebridge.conversation.server import BridgeServer
+from voicebridge.robot.rosbridge import Rosbridge
+from voicebridge.robot.rosbridge_robot import RosbridgeRobot
+from voicebridge.robotfile.loader import load
+from voicebridge.scripted import scripted_sentence
 
 
 class FakeSpeechServer:

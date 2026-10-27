@@ -3,7 +3,7 @@
 
 import pytest
 
-from voicebridge.phrases import Meaning, PhraseMatcher, same_sentence, words
+from voicebridge.safety.phrases import Meaning, PhraseMatcher, same_sentence, words
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ import enum
 import re
 from collections.abc import Iterable, Sequence
 
-from voicebridge.catalogue import ConfirmationSettings
+from voicebridge.robotfile.model import ConfirmationSettings
 
 
 class Meaning(enum.Enum):

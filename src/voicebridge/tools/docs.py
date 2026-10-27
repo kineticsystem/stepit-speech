@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import re
 
-from voicebridge.catalogue import Catalogue, Command, Parameter
-from voicebridge.planner import Planner
-from voicebridge.robot import Outcome
+from voicebridge.robot.planner import Planner
+from voicebridge.robot.request import Outcome
+from voicebridge.robotfile.model import Catalogue, Command, Parameter
 
 
 def _anchor(title: str) -> str:

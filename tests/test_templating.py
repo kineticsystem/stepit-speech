@@ -3,7 +3,7 @@
 
 import pytest
 
-from voicebridge.templating import TemplateError, check_syntax, evaluate, render
+from voicebridge.robotfile.templating import TemplateError, check_syntax, evaluate, render
 
 
 def test_a_single_expression_keeps_its_type():

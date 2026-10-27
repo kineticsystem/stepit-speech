@@ -4,9 +4,10 @@
 
 ``render_request`` fills the templates of a call with the arguments a command
 gives it, and returns the exact request that goes to rosbridge. ``Robot`` is
-the port the rest of the bridge talks to; ``RosbridgeRobot`` is the real one,
-and tests use a fake. ``judge`` turns the robot's answer into an ``Outcome``
-with the call's own ``success``, ``message`` and ``result`` templates.
+the port the rest of the bridge talks to: ``rosbridge_robot.RosbridgeRobot`` is
+the real one, and tests use a fake. ``judge`` turns the robot's answer into an
+``Outcome`` with the call's own ``success``, ``message`` and ``result``
+templates.
 """
 
 from __future__ import annotations
@@ -16,9 +17,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from voicebridge.catalogue import Call
-from voicebridge.rosbridge import Rosbridge, RosbridgeError
-from voicebridge.templating import TemplateError, evaluate, render
+from voicebridge.robotfile.model import Call
+from voicebridge.robotfile.templating import TemplateError, evaluate, render
 
 log = logging.getLogger("voicebridge.robot")
 
@@ -93,31 +93,3 @@ def judge(request: Request, response: Any, status: int | None = None) -> Outcome
     if not ok and not message and status == CANCELED:
         message = "it was stopped"
     return Outcome(ok, message, value)
-
-
-class RosbridgeRobot:
-    """The real robot, over rosbridge."""
-
-    def __init__(self, rosbridge: Rosbridge) -> None:
-        self._rosbridge = rosbridge
-
-    async def execute(self, request: Request) -> Outcome:
-        call = request.call
-        log.info("%s %s", call.kind, request.message())
-        try:
-            if call.kind == "action":
-                result = await self._rosbridge.send_action_goal(request.target, request.type, request.payload,
-                                                                timeout_s=call.timeout_s)
-                return judge(request, result.values, result.status)
-            if call.kind == "service":
-                response = await self._rosbridge.call_service(request.target, request.type, request.payload,
-                                                              timeout_s=call.timeout_s)
-                return judge(request, response)
-            if call.kind == "topic":
-                message = await self._rosbridge.read_topic(request.target, request.type,
-                                                           dict(call.qos) if call.qos else None, call.timeout_s)
-                return judge(request, message)
-            await self._rosbridge.publish(request.target, request.type, request.payload)
-            return judge(request, None)
-        except RosbridgeError as exc:
-            return Outcome(False, str(exc))

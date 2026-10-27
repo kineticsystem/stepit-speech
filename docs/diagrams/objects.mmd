@@ -56,6 +56,12 @@ classDiagram
         from_upstream(event)
         close()
     }
+    class Speaker {
+        say(text)
+        read_back(text)
+        take_over()
+        pump()
+    }
     class Planner {
         prepare(name, arguments) Prepared
         outcome_sentence(prepared, outcome)
@@ -97,6 +103,7 @@ classDiagram
     Guard ..> Catalogue : made from
     BridgeServer --> Robot
     BridgeServer ..> Session : one per browser
+    Session *-- Speaker
     Session --> Planner
     Session *-- Confirmation
     Session *-- PhraseMatcher
@@ -110,6 +117,7 @@ classDiagram
     style LlmProxy fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
     style Guard fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
     style Session fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
+    style Speaker fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
     style Planner fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
     style Confirmation fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
     style PhraseMatcher fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95

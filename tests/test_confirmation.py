@@ -3,8 +3,8 @@
 
 from conftest import FakeClock
 
-from voicebridge.confirmation import Confirmation, Phase, Verdict
-from voicebridge.phrases import Meaning
+from voicebridge.safety.confirmation import Confirmation, Phase, Verdict
+from voicebridge.safety.phrases import Meaning
 
 SENTENCE = "Turning 10 degrees left. Say yes to confirm."
 

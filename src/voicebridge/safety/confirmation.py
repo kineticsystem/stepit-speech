@@ -20,7 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from voicebridge.phrases import Meaning, same_sentence
+from voicebridge.safety.phrases import Meaning, same_sentence
 
 T = TypeVar("T")
 

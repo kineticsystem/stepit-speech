@@ -7,6 +7,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | Note | Pull request |
 |---|---|
 | [001-first-version.md](001-first-version.md) | [#1](https://github.com/kineticsystem/stepit-speech/pull/1) The voice bridge, with StepIt Macro's commands |
+| [split-voicebridge.md](split-voicebridge.md) | Not opened yet: voicebridge split by function |
 
 ## How to Write One
 

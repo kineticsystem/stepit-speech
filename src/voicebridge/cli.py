@@ -14,22 +14,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import sys
-import urllib.request
 from pathlib import Path
-from typing import Any
 
-from voicebridge.catalogue import Catalogue, RobotFileError, load, read_yaml
-from voicebridge.docs import generate
-from voicebridge.llmproxy import Guard, LlmProxy
-from voicebridge.planner import Planner, Rejected
-from voicebridge.prompt import instructions
-from voicebridge.robot import RosbridgeRobot
-from voicebridge.rosbridge import Rosbridge
-from voicebridge.server import BridgeServer
+from voicebridge.conversation.server import BridgeServer
+from voicebridge.llmproxy.guard import Guard
+from voicebridge.llmproxy.proxy import LlmProxy
+from voicebridge.robot.rosbridge import Rosbridge
+from voicebridge.robot.rosbridge_robot import RosbridgeRobot
+from voicebridge.robotfile.loader import RobotFileError, load
+from voicebridge.robotfile.model import Catalogue
+from voicebridge.tools.check import check as check_robot_file
+from voicebridge.tools.docs import generate
+from voicebridge.tools.evaluate import evaluate as evaluate_llm
+from voicebridge.tools.run import run as run_command
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "serve":
         return asyncio.run(_serve(catalogue, args))
     if args.action == "check":
-        return asyncio.run(_check(catalogue))
+        return asyncio.run(check_robot_file(catalogue))
     if args.action == "docs":
         text = asyncio.run(generate(catalogue, _relative(args.robot)))
         if args.output:
@@ -96,8 +96,8 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(text)
         return 0
     if args.action == "run":
-        return asyncio.run(_run(catalogue, args))
-    return _eval(catalogue, args)
+        return asyncio.run(run_command(catalogue, args.command, args.arguments, args.rosbridge, args.yes))
+    return evaluate_llm(catalogue, args.llm, args.model, args.say, args.think)
 
 
 def _relative(path: str) -> str:
@@ -125,116 +125,6 @@ async def _serve(catalogue: Catalogue, args: argparse.Namespace) -> int:
         await proxy.stop()
         await rosbridge.close()
     return 0
-
-
-async def _check(catalogue: Catalogue) -> int:
-    planner = Planner(catalogue, robot=None)
-    failures = 0
-    for name, command in catalogue.commands.items():
-        if not command.examples:
-            print(f"{name}: no example: add one, it teaches the LLM and tests the command")
-        for example in command.examples:
-            try:
-                prepared = await planner.prepare(name, example.expect, reads=example.reads)
-            except Rejected as exc:
-                failures += 1
-                print(f"FAIL {name}: {example.phrase!r}: {exc}")
-                continue
-            print(f"ok   {name}: {example.phrase!r}\n       says: {prepared.sentence}")
-            if prepared.request is not None:
-                print(f"       runs: {json.dumps(prepared.request.message())}")
-    print(f"{catalogue.name}: {len(catalogue.commands)} commands, {failures} failures")
-    return 1 if failures else 0
-
-
-async def _run(catalogue: Catalogue, args: argparse.Namespace) -> int:
-    raw: dict[str, Any] = {}
-    for item in args.arguments:
-        key, separator, value = item.partition("=")
-        if not separator:
-            print(f"error: {item!r} is not name=value", file=sys.stderr)
-            return 2
-        raw[key] = read_yaml(value)
-    rosbridge = Rosbridge(args.rosbridge or catalogue.rosbridge_url)
-    robot = RosbridgeRobot(rosbridge)
-    planner = Planner(catalogue, robot)
-    try:
-        try:
-            prepared = await planner.prepare(args.command, raw)
-        except Rejected as exc:
-            print(f"Rejected: {exc}")
-            return 1
-        print(f"Read back: {prepared.sentence}")
-        if prepared.request is None:
-            return 0
-        print(f"Request:   {json.dumps(prepared.request.message())}")
-        if not args.yes and input("Run it? [y/N] ").strip().lower() not in ("y", "yes"):
-            print("Cancelled.")
-            return 1
-        outcome = await robot.execute(prepared.request)
-        print(f"Outcome:   ok={outcome.ok} {outcome.message!r}")
-        print(f"Says:      {planner.outcome_sentence(prepared, outcome)}")
-        return 0 if outcome.ok else 1
-    finally:
-        await rosbridge.close()
-
-
-def _eval(catalogue: Catalogue, args: argparse.Namespace) -> int:
-    """Asks the LLM, through chat completions, which tool it calls for each phrase."""
-    tools = [{"type": "function", "function": {key: spec[key] for key in ("name", "description", "parameters")}}
-             for spec in catalogue.tool_specs()]
-    cases: list[tuple[str, str | None, dict[str, Any] | None]] = []
-    if args.say:
-        cases = [(phrase, None, None) for phrase in args.say]
-    else:
-        for name, command in catalogue.commands.items():
-            cases += [(example.phrase, name, dict(example.expect)) for example in command.examples]
-    failures = 0
-    for phrase, expected_name, expected in cases:
-        body: dict[str, Any] = {
-            "model": args.model,
-            "messages": [{"role": "system", "content": instructions(catalogue)}, {"role": "user", "content": phrase}],
-            "tools": tools,
-            "tool_choice": "auto",
-            "temperature": 0,
-        }
-        if not args.think:
-            body["chat_template_kwargs"] = {"enable_thinking": False}
-        request = urllib.request.Request(f"{args.llm.rstrip('/')}/chat/completions", data=json.dumps(body).encode(),
-                                         headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=600) as response:  # noqa: S310 - a local endpoint
-            message = json.load(response)["choices"][0]["message"]
-        calls = message.get("tool_calls") or []
-        if not calls:
-            verdict = "FAIL" if expected_name else "----"
-            failures += expected_name is not None
-            print(f"{verdict} {phrase!r}: no tool; it said {message.get('content')!r}")
-            continue
-        function = calls[0]["function"]
-        name = function["name"]
-        try:
-            arguments = json.loads(function.get("arguments") or "{}")
-        except ValueError:
-            arguments = None
-        ok = expected_name is None or (name == expected_name and _same(catalogue, name, arguments, expected))
-        failures += not ok
-        print(f"{'ok  ' if ok else 'FAIL'} {phrase!r}: {name}({json.dumps(arguments)})"
-              + ("" if ok or expected_name is None else f", expected {expected_name}({json.dumps(expected)})"))
-    print(f"{len(cases) - failures} of {len(cases)} understood as expected")
-    return 1 if failures else 0
-
-
-def _same(catalogue: Catalogue, name: str, arguments: Any, expected: Any) -> bool:
-    command = catalogue.commands[name]
-    try:
-        got, want = command.check_arguments(arguments), command.check_arguments(expected)
-    except Exception:  # noqa: BLE001 - arguments the bridge would reject are not the expected ones
-        return False
-    return all(
-        abs(got[key] - want[key]) < 1e-6 if isinstance(want[key], float) and isinstance(got[key], float)
-        else got[key] == want[key]
-        for key in want
-    )
 
 
 if __name__ == "__main__":

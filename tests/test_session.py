@@ -11,11 +11,8 @@ from typing import Any
 import pytest
 from conftest import FakeClock, FakeRobot
 
-from voicebridge.confirmation import Phase
-from voicebridge.prompt import AWAITING_CONFIRMATION
-from voicebridge.realtime import scripted_sentence
-from voicebridge.robot import Outcome
-from voicebridge.session import (
+from voicebridge.conversation.prompt import AWAITING_CONFIRMATION
+from voicebridge.conversation.session import (
     CANCELLED,
     MUTED_CALL,
     NOTHING_TO_CONFIRM,
@@ -25,6 +22,9 @@ from voicebridge.session import (
     TOO_LATE,
     Session,
 )
+from voicebridge.robot.request import Outcome
+from voicebridge.safety.confirmation import Phase
+from voicebridge.scripted import scripted_sentence
 
 READ_BACK = "Turning 10 degrees left. Say yes to confirm."
 
