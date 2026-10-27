@@ -298,10 +298,11 @@ The speech server answers every turn of the user by itself: VAD, STT, LLM and TT
 The speech server sends every reply through its LLM: there is no event that makes it say a fixed text. And an LLM asked to "say exactly" a sentence sometimes says another, or answers a command in words without calling it: "I can do that. Moving the camera closer by 10 millimetres.", while nothing moves. The proxy, in the package [`llmproxy`](../src/voicebridge/llmproxy), takes the LLM's place for the speech server, so that the bridge decides what reaches the model and what comes back. For each request of the speech server, in order:
 
 1. **A sentence of the bridge** in the instructions, between the tags: the proxy answers with it, and the model is not asked.
-2. **A request without tools**, e.g. a summary the speech server asks for on its own: passed through as it is.
-3. **The speech server's follow-up** after the bridge answered a command, a request that ends with the tool's output: answered with nothing, as the bridge speaks next. A rejection is the exception: the model explains it.
-4. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
-5. **Any other turn**: the model is asked for one decision, below.
+2. **The speech server's summary of older turns**, a request without tools that asks for `user_summary` and `assistant_summary`: answered with "Earlier turns are left out." for both, and the model is not asked. See [What the Model Never Sees](#what-the-model-never-sees).
+3. **Any other request without tools**: passed through as it is.
+4. **The speech server's follow-up** after the bridge answered a command, a request that ends with the tool's output: answered with nothing, as the bridge speaks next. A rejection is the exception: the model explains it.
+5. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
+6. **Any other turn**: the model is asked for one decision, below.
 
 `proxy` holds this order; `chat` reads the request, `decision` writes the request for one decision, described next, and `guard` judges the reply. The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: a server of several models would otherwise answer a request that names another one, e.g. a summary the speech server asks for on its own, with another model. `llama-server` serves one, and needs none of this.
 
@@ -324,6 +325,8 @@ A reply can still pretend. The proxy refuses a reply that asks to confirm, or th
 ### What the Model Never Sees
 
 A model that has heard the bridge read commands back starts doing it itself: after a few turns it answers "Switching the lights on. Confirm?" without calling the command. So the proxy removes from the history every sentence it said in the model's place, the read-backs, outcomes and greeting, before it asks the model. The model sees our requests and its own calls, never the bridge's words. And it never sees the turn of a yes, a no or a stop, which the proxy answers with nothing.
+
+Nor does it see a summary of the bridge's words. Once the history grows past its `chat_size`, the speech server can ask its LLM to summarise the older turns, and puts the summary at the head of the history. Written by the model, it retells the read-backs and outcomes in its own words, "The assistant rotated the stage", which the proxy cannot recognise to remove, and the model sees itself acting again. So the proxy writes the summary itself, "Earlier turns are left out.", for the user and the assistant alike, and removes both from every request before it asks the model. The README starts the speech server with `--compact_history false`, so that it drops the oldest turns instead, and asks for no summary at all.
 
 ### The LLM Behind It
 
@@ -360,7 +363,7 @@ There is no second thread because there is no rclpy: a ROS 2 node would need its
 | Test | What it covers |
 |---|---|
 | `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply and a call inside it, a yes with nothing waiting, the greeting, closing during a command. |
-| `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through. |
+| `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the summary of older turns written without the model and kept out of the history, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through. |
 | `test_confirmation.py` | The state machine, with a fake clock. |
 | `test_phrases.py` | What counts as yes, no and stop, and what does not, e.g. "yes but 20 degrees", "right". |
 | `test_catalogue.py` | The robot file: short forms, the tool of the LLM, the check of arguments, and each mistake the loader finds. |

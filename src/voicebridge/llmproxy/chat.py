@@ -5,10 +5,18 @@
 Pure functions on plain dicts, with no I/O: what a request says, a request
 without some of its messages, and an answer written by the proxy itself, as
 one completion or as the chunks of a stream.
+
+The speech server also asks its LLM, with no tools, to summarise older turns
+once the history grows past its ``chat_size``. Left to the model, a summary
+retells the bridge's read-backs and outcomes in its own words, "The assistant
+rotated the stage", which the proxy cannot find to remove, and the model then
+sees itself acting. So the proxy answers that request itself, with ``SUMMARY``
+for both sides, and removes ``SUMMARY`` from every later request.
 """
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from collections.abc import Collection, Mapping
@@ -16,6 +24,11 @@ from typing import Any
 
 from voicebridge.safety.phrases import words
 from voicebridge.scripted import scripted_sentence
+
+# The two fields the speech server's summary of older turns asks for.
+SUMMARY_FIELDS = ("user_summary", "assistant_summary")
+# What older turns are summarised into, on both sides: nothing the model could read as an action.
+SUMMARY = "Earlier turns are left out."
 
 
 def _system_texts(body: Mapping[str, Any]) -> list[str]:
@@ -40,17 +53,34 @@ def scripted(body: Mapping[str, Any]) -> str | None:
     return None
 
 
-def last_user_text(body: Mapping[str, Any]) -> str | None:
-    """What the user said, when the last message of a request is theirs."""
-    messages = [m for m in body.get("messages") or [] if isinstance(m, Mapping)]
-    if not messages or messages[-1].get("role") != "user":
-        return None
-    content = messages[-1].get("content")
+def _text(content: Any) -> str:
+    """The text of a message's content: a string, or a list of parts."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         return " ".join(str(part.get("text") or "") for part in content if isinstance(part, Mapping))
     return ""
+
+
+def last_user_text(body: Mapping[str, Any]) -> str | None:
+    """What the user said, when the last message of a request is theirs."""
+    messages = [m for m in body.get("messages") or [] if isinstance(m, Mapping)]
+    if not messages or messages[-1].get("role") != "user":
+        return None
+    return _text(messages[-1].get("content"))
+
+
+def asks_for_summary(body: Mapping[str, Any]) -> bool:
+    """Whether a request is the speech server's own, to summarise older turns: no tools, and
+    instructions that ask for the two fields of a summary."""
+    if body.get("tools"):
+        return False
+    return any(all(f'"{field}"' in text for field in SUMMARY_FIELDS) for text in _system_texts(body))
+
+
+def summary() -> str:
+    """The answer to a request for a summary: ``SUMMARY`` on both sides, as the JSON it asks for."""
+    return json.dumps(dict.fromkeys(SUMMARY_FIELDS, SUMMARY))
 
 
 def after_command(body: Mapping[str, Any]) -> bool:
@@ -69,6 +99,17 @@ def without(body: dict[str, Any], sentences: Collection[tuple[str, ...]]) -> dic
                 and tuple(words(message["content"])) in sentences)
 
     return {**body, "messages": [m for m in body.get("messages") or [] if not spoken(m)]}
+
+
+def without_summary(body: dict[str, Any]) -> dict[str, Any]:
+    """The request without the user's and the assistant's messages of ``SUMMARY``."""
+    summary_words = words(SUMMARY)
+
+    def summarised(message: Any) -> bool:
+        return (isinstance(message, Mapping) and message.get("role") in ("user", "assistant")
+                and not message.get("tool_calls") and words(_text(message.get("content"))) == summary_words)
+
+    return {**body, "messages": [m for m in body.get("messages") or [] if not summarised(m)]}
 
 
 def completion(model: str, content: str, tool_calls: list[dict[str, Any]],
