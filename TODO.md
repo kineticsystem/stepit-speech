@@ -1,7 +1,71 @@
 # TODO
 
+## Next: Hands-Free, From a Phone in a Pocket
+
+The goal: control the robot by voice with our hands busy. An Android phone in a pocket, with a headset, always listening; "Wake up StepIt" switches the voice on, "Go to sleep StepIt" switches it off. Today the voice starts with the button of the speech server's browser demo, and listens until the page closes.
+
+Three steps, in this order. Decide the open questions first.
+
+### 1. Sleep Mode in the Bridge
+
+The bridge, not the phone, decides whether it is awake, from fixed words, as it decides yes and stop. The phone only carries the audio and shows the state, so a bug of the phone cannot wake the robot.
+
+- **Two states.** Asleep: everything we say is ignored; nothing reaches the LLM, no command is proposed, the voice stays silent. Awake: as today.
+- **The phrases in the robot file**, e.g. `wake: [wake up stepit, wake up step it]` and `sleep: [go to sleep stepit, go to sleep step it]`, matched as yes, no and stop are. Speech-to-text will probably write "StepIt" as "step it" or "stepped": try the variants with the voice.
+- **The voice answers** the change, e.g. "I'm listening." and "Going to sleep.", as sentences of the bridge.
+- **Silent while asleep.** The session mutes and cancels the speech server's reply to every turn, as it does for a yes.
+- **The LLM never sees the sleeping turns.** The proxy finds the state on its own, from the last wake or sleep phrase in the transcripts of each request, so it shares no state with the session, and drops the sleeping turns from the history.
+- **Stop always works**, asleep or awake: a stop missed is the failure that matters.
+- **A state event for the phone**, e.g. `voicebridge.state` with `asleep` or `awake`, which the browser demo ignores.
+- A safety rule and its test in `tests/test_session.py`, and the proxy's tests in `tests/test_llmproxy.py`.
+
+Open questions:
+
+- The phrases: "Wake up StepIt" and "Go to sleep StepIt"?
+- Asleep or awake when a phone connects? Asleep is the safer start: nothing happens until we wake it.
+- Fall asleep after a quiet spell, e.g. 5 minutes, or only when told?
+
+The speech server still transcribes everything while asleep, on our own GPU: nothing leaves the computer, but the microphone is live. A wake word recognised on the phone, before any audio leaves it, would avoid that, at the price of a wake-word model of our own: openWakeWord needs one trained for the phrase, and Porcupine's free tier excludes commercial use.
+
+### 2. Test a Phone in a Pocket
+
+Before writing the app, find out what the phone does with its screen off. A minimal page, or a minimal app, streams the microphone to the bridge and plays the voice; we wear it for 30 minutes, with the headset, while the robot runs a focus stack.
+
+- **Does the microphone keep going with the screen locked?** Chrome on Android throttles or freezes a page in the background, and may stop its microphone. A native app keeps it with a foreground service of type `microphone`, behind a permanent notification.
+- **Does the connection hold?** A session that ends cancels its goals: the rule that no robot moves for a voice that is gone. A Wi-Fi drop, or Android pausing the app, would stop a focus stack half way. If drops happen, decide whether the bridge gives a session a short grace period to reconnect before it cancels.
+- **Which headset?** Wired or USB-C keeps the full audio quality and no echo of the voice. A Bluetooth headset switches the phone's microphone to the hands-free profile, often 8 or 16 kHz, and speech-to-text gets worse: fine for "yes" and "stop", riskier for "rotate the stage 12.5 degrees".
+- **The battery**, over an hour.
+
+The voice stop takes about a second. In a pocket, with our hands busy, it still does not replace the stop of the gamepad or of StepIt UI.
+
+### 3. The App
+
+What the app does is the same in every form: capture the microphone at 24 kHz, 16-bit mono, with echo cancellation, and send it as `input_audio_buffer.append`; play the voice's `response.output_audio.delta`, and cut it as soon as we speak, so that "stop" interrupts it; reconnect after a drop; show asleep or awake, what was heard and the last read-back. It decides nothing about the robot. Three ways to write it:
+
+| | Web page (React, Vite, TypeScript, pnpm) | Capacitor app | Native Android app (Kotlin) |
+|---|---|---|---|
+| What it is | A page in Chrome, or installed as a PWA | The same React app, packaged as an Android app by [Capacitor](https://capacitorjs.com/), an MIT-licensed tool from the makers of Ionic, with a small native plugin | An app written for Android: Jetpack Compose for the screen, a foreground service for the microphone |
+| Listening in a pocket | Uncertain: step 2 tells | Reliable, through the plugin's foreground service | Reliable |
+| Control of the audio | What Chrome offers | What Chrome offers, or the plugin's own | Full: `AudioRecord` with `VOICE_COMMUNICATION`, `AudioTrack`, the headset chosen with `AudioManager.setCommunicationDevice` |
+| Reaching the bridge | HTTPS and WSS only: browsers allow the microphone only on secure pages, and a phone reaching `192.168.x.x` is not `localhost`. A certificate from `mkcert` installed on the phone, or Tailscale's | `ws://` on the local network, allowed by its network configuration | Same as Capacitor |
+| Code | About 600 to 900 lines of TypeScript | The same, plus about 100 lines of Kotlin, more if the plugin does the audio | About 1,000 to 1,500 lines of Kotlin |
+| iPhone later | Partly | Yes, with an iOS plugin | A second app, in Swift |
+| Build | Node and pnpm, in `web/` | Also the Android SDK | The Android SDK and Gradle, in `android/` |
+
+The speech server's demo, `demo/` of speech-to-speech (Apache 2.0), has working audio worklets for capture and playback to learn from. Whichever form, the app lives in this repository, builds in Docker like the rest (e.g. `./docker/dock.sh build-android`), and is tested against a fake bridge without a phone.
+
+My leaning: the native app for a phone in a pocket, as the audio is the heart of it. Capacitor if we want to stay in React and TypeScript, or want an iPhone later. The web page only if step 2 shows that Chrome keeps listening.
+
+Open questions:
+
+- Which phone, and which headset: wired, USB-C or Bluetooth?
+- Web page, Capacitor or native?
+- An iPhone one day?
+
 ## Later
 
+- **Download Bonsai from its release repository.** We download `Ternary-Bonsai-2-27B-Q2_0-prism-fork-required.gguf` from `prism-ml/Ternary-Bonsai-2-27B-gguf-dev`, Prism ML's development repository. Its release repository, `prism-ml/Ternary-Bonsai-2-27B-gguf`, has `Ternary-Bonsai-2-27B-PQ2_0.gguf`, 7.2 GB, under the same Apache 2.0 licence. For a product, switch to it once `llama-server` of the submodule loads it and `voicebridge eval` still scores 35 of 35 on the GPU computer.
+- **Credit the models in a product.** Bonsai and Qwen3.8-27B are Apache 2.0: ship their `LICENSE` and `NOTICE.txt` with the model file, and Prism ML asks for "Created using Bonsai by Prism ML.". The speech server's default speech-to-text, NVIDIA's Parakeet TDT 0.6B v3, is CC BY 4.0, which requires credit.
 - **Start the speech server from this project too**, so that one command starts the whole voice: the speech server, llama-server and the bridge, as `docker/compose.yaml` already starts the last two.
 - **Check the LLM on the GPU computer** after each new release of the submodule: `voicebridge eval` must still score 35 of 35.
 - **Remove the dependency on StepIt Macro**: its robot file moves into the stepit-macro repository, and this project becomes a module of the rig.
