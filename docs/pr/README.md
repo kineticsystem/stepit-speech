@@ -8,6 +8,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 |---|---|
 | [001-first-version.md](001-first-version.md) | [#1](https://github.com/kineticsystem/stepit-speech/pull/1) The voice bridge, with StepIt Macro's commands |
 | [002-split-voicebridge.md](002-split-voicebridge.md) | [#2](https://github.com/kineticsystem/stepit-speech/pull/2) Refactor: split voicebridge into parts by function |
+| [bundled-llm.md](bundled-llm.md) | Not opened yet: llama.cpp and Bonsai in the project |
 
 ## How to Write One
 

@@ -19,7 +19,8 @@ Everything is built and tested in the image of `docker/Dockerfile`, as CI does; 
 ```bash
 ./docker/dock.sh build    # the image
 ./docker/dock.sh test     # bin/test.sh: ruff, voicebridge check of every robot file, pytest
-./docker/dock.sh serve    # the bridge, on the host's network
+./docker/dock.sh build-llm  # the image of llama-server, with CUDA
+./docker/dock.sh serve    # the LLM, then the bridge, on the host's network
 ./docker/dock.sh shell
 ```
 
@@ -28,9 +29,9 @@ A virtual environment works too: `uv venv && uv pip install -e '.[dev]' && bin/t
 - `voicebridge check <robot file>` prepares every example without a robot.
 - `voicebridge docs robots/stepit-macro/robot.yaml -o robots/stepit-macro/commands.md` regenerates the list of commands: `test_commands_md_is_up_to_date` fails when it is stale. Regenerate it after every change of the robot file.
 - `voicebridge run <robot file> <command> name=value...` runs one command on the robot, asking first.
-- `voicebridge eval <robot file>` scores the LLM on the examples, through the running bridge's proxy (`http://localhost:8767/v1`, model `stepit-macro-bonsai`); not in CI.
+- `voicebridge eval <robot file>` scores the LLM on the examples, through the running bridge's proxy (`http://localhost:8767/v1`, model `bonsai-2-27b`); not in CI.
 
-The LLM must enforce a JSON schema (`response_format`): llama.cpp does, azllm does not. The voice uses Bonsai 2 27B on upstream llama.cpp, served for now by llama-swap of `~/repo/qwen-4090-bench`, entry `stepit-macro-bonsai`; `TODO.md` plans to bring the model and llama.cpp into this repository.
+The LLM must enforce a JSON schema (`response_format`): llama.cpp does, azllm does not. The voice uses Bonsai 2 27B on `llama-server` of the submodule `engines/llama.cpp` (release b11840), in its own CUDA image (`docker/llm.Dockerfile`, `./docker/dock.sh build-llm`); `./docker/dock.sh serve` downloads the model into `models/` (`bin/download-model.sh`) and starts it with the bridge (`docker/compose.yaml`), thinking off. The test image and CI never build it: keep them free of the GPU. `./docker/dock.sh bridge` runs the bridge alone, against another LLM.
 
 A test that talks to a robot uses the fakes of `tests/conftest.py`, never the real rig. Run commands on the real rig only with fake hardware (`use_dummy`, `fake`, `use_fake` in stepit-macro's `rig.yaml`), unless the user asks otherwise, and restore any state changed, e.g. the plan of the stack.
 
