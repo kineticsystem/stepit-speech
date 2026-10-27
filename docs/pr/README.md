@@ -9,7 +9,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [001-first-version.md](001-first-version.md) | [#1](https://github.com/kineticsystem/stepit-speech/pull/1) The voice bridge, with StepIt Macro's commands |
 | [002-split-voicebridge.md](002-split-voicebridge.md) | [#2](https://github.com/kineticsystem/stepit-speech/pull/2) Refactor: split voicebridge into parts by function |
 | [003-bundled-llm.md](003-bundled-llm.md) | [#3](https://github.com/kineticsystem/stepit-speech/pull/3) Run Bonsai on llama.cpp from the project, started with the bridge |
-| [summary-off.md](summary-off.md) | Not opened yet: no summaries of older turns |
+| [004-summary-off.md](004-summary-off.md) | [#4](https://github.com/kineticsystem/stepit-speech/pull/4) No summaries of older turns: the proxy writes them, without the model |
 
 ## How to Write One
 
