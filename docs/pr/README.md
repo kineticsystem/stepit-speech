@@ -10,7 +10,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [002-split-voicebridge.md](002-split-voicebridge.md) | [#2](https://github.com/kineticsystem/stepit-speech/pull/2) Refactor: split voicebridge into parts by function |
 | [003-bundled-llm.md](003-bundled-llm.md) | [#3](https://github.com/kineticsystem/stepit-speech/pull/3) Run Bonsai on llama.cpp from the project, started with the bridge |
 | [004-summary-off.md](004-summary-off.md) | [#4](https://github.com/kineticsystem/stepit-speech/pull/4) No summaries of older turns: the proxy writes them, without the model |
-| [todo-hands-free.md](todo-hands-free.md) | Not opened yet: the plan for hands-free control from a phone |
+| [005-todo-hands-free.md](005-todo-hands-free.md) | [#5](https://github.com/kineticsystem/stepit-speech/pull/5) TODO: hands-free control from a phone in a pocket |
 
 ## How to Write One
 
