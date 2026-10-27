@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Giovanni Remigi
 # SPDX-License-Identifier: MIT
 
-from voicebridge.realtime import (
+from voicebridge.conversation.events import (
     assistant_text,
     bridge_tag,
     command_call,

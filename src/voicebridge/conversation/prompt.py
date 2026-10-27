@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from voicebridge.catalogue import Catalogue
+from voicebridge.robotfile.model import Catalogue
 
 # What a tool call of a command that needs confirmation returns to the LLM.
 AWAITING_CONFIRMATION = (

@@ -4,8 +4,8 @@
 import pytest
 from conftest import FakeRobot
 
-from voicebridge.planner import Planner, Rejected
-from voicebridge.robot import Outcome
+from voicebridge.robot.planner import Planner, Rejected
+from voicebridge.robot.request import Outcome
 
 
 async def test_prepare_renders_the_sentence_and_the_request_together(arm):

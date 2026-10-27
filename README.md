@@ -234,7 +234,7 @@ Three tools of the image try a robot file without speaking, in `./docker/dock.sh
 
 ## Using It With Another Robot
 
-Write a robot file for it: its `rosbridge` address, its `calls`, how its commands reach it, and its `commands`. The calls of standard ROS 2 interfaces, `get_parameters`, `set_parameters`, `trigger` and `read_latched_topic`, come with voicebridge, in [`src/voicebridge/calls.yaml`](src/voicebridge/calls.yaml). Then start the bridge with it:
+Write a robot file for it: its `rosbridge` address, its `calls`, how its commands reach it, and its `commands`. The calls of standard ROS 2 interfaces, `get_parameters`, `set_parameters`, `trigger` and `read_latched_topic`, come with voicebridge, in [`src/voicebridge/robotfile/calls.yaml`](src/voicebridge/robotfile/calls.yaml). Then start the bridge with it:
 
 ```bash
 ./docker/dock.sh serve robots/<robot>/robot.yaml

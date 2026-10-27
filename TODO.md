@@ -22,7 +22,7 @@ Today the LLM of the voice, Bonsai 2 27B, is served by llama-swap from another r
   - It is a client. The proxy still serves the speech server's OpenAI API and turns the decision back into a tool call.
   - It brings opentelemetry, pydantic-graph and httpx with it.
 
-  Try it on a branch, on `_ask` of `llmproxy.py` only: keep it if it removes code and `voicebridge eval` still scores 35 of 35; otherwise note why here and drop it.
+  Try it on a branch, on `_ask` of `llmproxy/proxy.py` only: keep it if it removes code and `voicebridge eval` still scores 35 of 35; otherwise note why here and drop it.
 - **Keep a short history, without summaries.** The speech server keeps the last `chat_size` turns, 30 by default, and with `compact_history`, on by default, asks the LLM to summarise the older ones. The summary request has no tools, so the proxy passes it to the model, which then retells the bridge's read-backs and outcomes in its own words: "The assistant rotated the stage". The proxy cannot remove a paraphrase, and the model sees itself acting again, which makes it pretend. Our commands stand alone, so a few turns are enough.
   - Start the speech server with summaries off and a short history, probably `--compact_history false --chat_size 8`: check the names with `uv run speech-to-speech serve --help`, then add them to the README.
   - Make the proxy handle the summary request on its own, e.g. answer it with empty summaries, and test it in `test_llmproxy.py`.

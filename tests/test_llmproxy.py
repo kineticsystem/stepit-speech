@@ -11,22 +11,12 @@ import aiohttp
 import pytest
 from aiohttp import web
 
-from voicebridge.llmproxy import (
-    REPLY,
-    SAY_AGAIN,
-    Guard,
-    LlmProxy,
-    asks_to_confirm,
-    chunks,
-    commands_only,
-    completion,
-    pretends,
-    scripted,
-    settle,
-    structured,
-)
-from voicebridge.phrases import PhraseMatcher
-from voicebridge.realtime import exact_speech
+from voicebridge.llmproxy.chat import chunks, completion, scripted
+from voicebridge.llmproxy.decision import REPLY, commands_only, settle, structured
+from voicebridge.llmproxy.guard import Guard, asks_to_confirm, pretends
+from voicebridge.llmproxy.proxy import SAY_AGAIN, LlmProxy
+from voicebridge.safety.phrases import PhraseMatcher
+from voicebridge.scripted import exact_speech
 
 MOVE = {"type": "function", "function": {"name": "move_camera", "description": "Moves the camera.",
                                          "parameters": {"type": "object", "properties": {

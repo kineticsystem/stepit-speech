@@ -6,9 +6,10 @@ import asyncio
 
 import pytest
 
-from voicebridge.catalogue import Call
-from voicebridge.robot import RosbridgeRobot, judge, render_request
-from voicebridge.rosbridge import ActionResult, Rosbridge, RosbridgeError
+from voicebridge.robot.request import judge, render_request
+from voicebridge.robot.rosbridge import ActionResult, Rosbridge, RosbridgeError
+from voicebridge.robot.rosbridge_robot import RosbridgeRobot
+from voicebridge.robotfile.model import Call
 
 
 async def test_call_service(fake_rosbridge):

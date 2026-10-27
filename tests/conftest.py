@@ -12,8 +12,9 @@ from typing import Any
 import pytest
 import websockets
 
-from voicebridge.catalogue import Catalogue, load
-from voicebridge.robot import Outcome, Request
+from voicebridge.robot.request import Outcome, Request
+from voicebridge.robotfile.loader import load
+from voicebridge.robotfile.model import Catalogue
 
 ROOT = Path(__file__).resolve().parent.parent
 ARM = ROOT / "tests" / "robots" / "arm.yaml"

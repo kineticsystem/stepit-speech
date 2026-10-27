@@ -7,9 +7,9 @@ import json
 import pytest
 from conftest import STEPIT_MACRO
 
-from voicebridge.catalogue import load
-from voicebridge.docs import generate
-from voicebridge.planner import Planner, Rejected
+from voicebridge.robot.planner import Planner, Rejected
+from voicebridge.robotfile.loader import load
+from voicebridge.tools.docs import generate
 
 EXAMPLES = [(name, example) for name, command in load(STEPIT_MACRO).commands.items()
             for example in command.examples]

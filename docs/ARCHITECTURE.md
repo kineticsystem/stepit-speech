@@ -14,7 +14,7 @@
   - [Every Key of a Command](#every-key-of-a-command)
   - [Templates](#templates)
   - [What the Loader Checks](#what-the-loader-checks)
-- [The Modules](#the-modules)
+- [The Parts and Their Modules](#the-parts-and-their-modules)
 - [The Objects at Run Time](#the-objects-at-run-time)
 - [Inside a Session](#inside-a-session)
   - [The Events It Reads](#the-events-it-reads)
@@ -31,11 +31,11 @@
 
 ## Introduction
 
-This document explains how StepIt Speech is built, what each part is responsible for, and where to start when we want to change something. It assumes you have read the [README](../README.md). Its code is the Python package `voicebridge`, in `src/voicebridge`, about 3,200 lines with their docstrings; the robot it drives first is StepIt Macro, through [`robots/stepit-macro/robot.yaml`](../robots/stepit-macro/robot.yaml).
+This document explains how StepIt Speech is built, what each part is responsible for, and where to start when we want to change something. It assumes you have read the [README](../README.md). Its code is the Python package `voicebridge`, in `src/voicebridge`: about 3,400 lines with their docstrings, in six packages and two single modules, described in [The Parts and Their Modules](#the-parts-and-their-modules). The robot it drives first is StepIt Macro, through [`robots/stepit-macro/robot.yaml`](../robots/stepit-macro/robot.yaml).
 
 It follows one idea: **the LLM proposes, the bridge decides**. The LLM is good at understanding "spin the turntable forty five degrees anticlockwise", and bad at being certain: it can mishear, guess or invent. So it is given one job only, turning words into a proposed command. Everything that decides whether the robot moves is plain code with fixed rules: the limits of each value, the sentence read back, the words that mean yes, and stop. Even the LLM's answer has a fixed shape: one JSON object, a command or a short reply, which its server enforces.
 
-A waiter works the same way. We order in our own words; the waiter writes the order on a slip in the kitchen's words and reads it back to us; the kitchen cooks only once we said "yes, that's it". If we say anything else, the slip goes in the bin, and if we shout "stop!", everything stops, whatever is written on the slip.
+An example from everyday life, outside software, shows the idea: a waiter in a restaurant. We order in our own words; the waiter writes the order on a slip in the kitchen's words and reads it back to us; the kitchen cooks only once we said "yes, that's it". If we say anything else, the slip goes in the bin, and if we shout "stop!", everything stops, whatever is written on the slip. In StepIt Speech, the LLM writes the slip, the bridge is the waiter who reads it back and hears our yes, and the robot is the kitchen.
 
 ## The Big Picture
 
@@ -106,7 +106,7 @@ The bridge exists for these rules. Each one is code, not a request to the LLM, a
 
 ### The Confirmation, as a State Machine
 
-The pending command lives in a `Confirmation` object, in [`confirmation.py`](../src/voicebridge/confirmation.py). It holds at most one command, and is always in one of three states:
+The pending command lives in a `Confirmation` object, in [`safety/confirmation.py`](../src/voicebridge/safety/confirmation.py). It holds at most one command, and is always in one of three states:
 
 <!-- The source is diagrams/confirmation-states.mmd: change it, then run bin/render-diagrams.sh. -->
 <p align="center"><img src="diagrams/confirmation-states.svg" alt="The states of a confirmation: Idle, ReadingBack, Armed; only a yes within 20 seconds from Armed runs the command, everything else drops it, and both go back to Idle." width="699"></p>
@@ -152,11 +152,11 @@ On the rig, with its fake motors, the commander logged the cancel 1.5 seconds af
 A robot file has two halves, for two people:
 
 - **`commands`**: what the user can say. Anyone can write one: it names no topic and no message type.
-- **`calls`**: how a command reaches the robot over rosbridge: an action, a service or a topic, its message type, the request, and how to tell success. Someone who knows the robot's ROS interface writes them once. The calls of standard ROS 2 interfaces, `get_parameters`, `set_parameters`, `trigger` and `read_latched_topic`, come with voicebridge in [`calls.yaml`](../src/voicebridge/calls.yaml).
+- **`calls`**: how a command reaches the robot over rosbridge: an action, a service or a topic, its message type, the request, and how to tell success. Someone who knows the robot's ROS interface writes them once. The calls of standard ROS 2 interfaces, `get_parameters`, `set_parameters`, `trigger` and `read_latched_topic`, come with voicebridge in [`robotfile/calls.yaml`](../src/voicebridge/robotfile/calls.yaml).
 
 A command uses a call by its name, and gives it values. `rotate_stage` runs the call `objective` with a name and a payload; the call `objective` knows that this means a goal of `btcpp_ros2_interfaces/action/ExecuteTree` on `/commander/execute_objective`, and that the goal succeeded when its status is 4 and the tree returned SUCCESS. Ten of the twelve StepIt Macro commands that run something use three calls: `objective`, `set_parameters` and `trigger`.
 
-The loader turns the file into these objects, in [`catalogue.py`](../src/voicebridge/catalogue.py). They are frozen dataclasses: once loaded, nothing changes them.
+The loader, in [`robotfile/loader.py`](../src/voicebridge/robotfile/loader.py), turns the file into these objects, in [`robotfile/model.py`](../src/voicebridge/robotfile/model.py). They are frozen dataclasses: once loaded, nothing changes them.
 
 <!-- The source is diagrams/robot-file.mmd: change it, then run bin/render-diagrams.sh. -->
 <p align="center"><img src="diagrams/robot-file.svg" alt="The classes of a robot file: a Catalogue holds its confirmation settings, its commands and its calls; a command holds its parameters, the uses of calls and its examples." width="856"></p>
@@ -181,7 +181,7 @@ The loader turns the file into these objects, in [`catalogue.py`](../src/voicebr
 
 ### Templates
 
-Values are [Jinja2](https://jinja.palletsprojects.com/) templates, in [`templating.py`](../src/voicebridge/templating.py). One rule makes them work for requests as well as for sentences: **a string that is a single `{{ expression }}` keeps the type of the expression**. `"{{ -degrees }}"` is the number -10.0, not the text "-10.0"; `"{{ [shots | float] }}"` is a list. Any other string is text: `"Rotating the stage {{ degrees }} degrees"`.
+Values are [Jinja2](https://jinja.palletsprojects.com/) templates, in [`robotfile/templating.py`](../src/voicebridge/robotfile/templating.py). One rule makes them work for requests as well as for sentences: **a string that is a single `{{ expression }}` keeps the type of the expression**. `"{{ -degrees }}"` is the number -10.0, not the text "-10.0"; `"{{ [shots | float] }}"` is a list. Any other string is text: `"Rotating the stage {{ degrees }} degrees"`.
 
 The filters the robot files need:
 
@@ -200,37 +200,62 @@ A number printed into a text reads as a person says it: 10.0 is "10". The enviro
 
 `load` checks the whole file before the bridge starts, and says where a mistake is: a key it does not know, e.g. `sya` for `say`; a call that does not exist; a template that does not compile; a name a template reads that is not a parameter, `reads` or a `let`, with the names it knows; an example whose arguments do not fit its parameters; a query that does not say `confirm: false`; stop words without a stop command. Two traps of YAML are handled for us: `yes`, `no`, `on` and `off` stay words, not booleans, and a key with a space, which a comma inside `{ }` creates, comes with a hint to use quotes.
 
-## The Modules
+## The Parts and Their Modules
 
-The package is fifteen modules in [`src/voicebridge`](../src/voicebridge), in four layers. A module imports only from the layers below it.
+The package is split by what each part does, in six packages and two single modules in [`src/voicebridge`](../src/voicebridge). Each package's `__init__.py` lists its modules in one line each. A part imports only the parts below it in this table, and [`tests/test_layers.py`](../tests/test_layers.py) fails when one does not.
 
-| Layer | Module | Responsibility | Must never |
-|---|---|---|---|
-| Tools | `cli` | The command line: `serve`, `check`, `docs`, `run`, `eval`. | Hold logic the bridge needs. |
-| | `docs` | `commands.md`, from the robot file and its examples. | |
-| Conversation | `server` | The WebSocket server; one `Session` per browser, and its connection to the speech server. | Look into the events. |
-| | `session` | The rules of [Inside a Session](#inside-a-session). | Decide yes with the LLM; talk to rosbridge itself. |
-| | `llmproxy` | The LLM proxy of [The LLM Proxy](#the-llm-proxy): the bridge's sentences, one JSON decision per turn, what the model never sees. | Run a command, or decide a yes. |
-| Robot | `planner` | From a tool call to a `Prepared` command: checks, reads, read-back and request. | Run the command. |
-| | `robot` | `render_request`, `judge`, the `Robot` port and `RosbridgeRobot`. | Know a robot's names. |
-| | `prompt` | The LLM's instructions. | |
-| Model | `catalogue` | The robot file: load, check, the tools of the LLM, the check of arguments. | Do I/O beyond reading the file. |
-| | `confirmation` | The state machine of the pending command. | Do I/O, or read a clock of its own. |
-| | `phrases` | Yes, no, stop or other, from fixed lists of words. | Ask the LLM. |
-| Foundation | `templating` | Jinja2, sandboxed, with typed results and the filters. | Know of robots. |
-| | `rosbridge` | The client of rosbridge's protocol. | Know of commands. |
-| | `realtime` | Pure functions on the events of the Realtime API. | Do I/O. |
+| Part | What it owns | Must never |
+|---|---|---|
+| `cli` | The command line, and the wiring of `voicebridge serve`: one `Catalogue`, one `Rosbridge`, the `BridgeServer` and the `LlmProxy`. | Hold logic the bridge needs. |
+| `tools` | `check`, `docs`, `run` and `eval`: trying a robot file without a voice. | Be needed by `serve`. |
+| `conversation` | The WebSocket bridge between the browser and the speech server, and the session that holds the safety rules. | Decide yes with the LLM; talk to rosbridge itself. |
+| `llmproxy` | The speech server's LLM: the bridge's sentences said without the model, one JSON decision per turn, what the model never sees. | Run a command, or decide a yes. |
+| `scripted` | The tags around a sentence of the bridge: the one contract between `conversation` and `llmproxy`. | Import anything of voicebridge. |
+| `safety` | Yes, no, stop or anything else, from fixed lists of words; the state machine of the pending command. | Ask the LLM, do I/O, or read a clock of its own. |
+| `robot` | From a tool call to a prepared command, and from a request to the robot's outcome, through rosbridge. | Know a robot's names. |
+| `robotfile` | The robot file: its model, its loader and checks, its templates, the calls of standard ROS 2 interfaces. | Do I/O beyond reading the file. |
 
-The imports, as they are:
+`conversation` and `llmproxy` sit side by side and never import each other: the session writes a sentence of the bridge with `scripted.exact_speech`, and the proxy finds it with `scripted.scripted_sentence`. `safety` and `robot` are side by side too: the session joins them.
 
 <!-- The source is diagrams/modules.mmd: change it, then run bin/render-diagrams.sh. -->
-<p align="center"><img src="diagrams/modules.svg" alt="The modules of voicebridge in five layers, tools, conversation, robot, model and foundation, and the imports between them, all going down." width="951"></p>
+<p align="center"><img src="diagrams/modules.svg" alt="The parts of voicebridge and their imports, all going down: cli imports tools, conversation and llmproxy; conversation imports safety, robot and scripted; llmproxy imports scripted and safety; safety and robot import robotfile." width="764"></p>
 
-Some edges are left out for clarity, e.g. `cli` imports most modules, `session` also imports `catalogue` and `robot`, and `llmproxy` imports `catalogue`; `session` and `llmproxy` share only `realtime.exact_speech` and `scripted_sentence`, the tags of a sentence of the bridge; none goes up a layer, and there is no cycle. One edge is worth knowing: `robot` holds both the `Robot` port and its rosbridge implementation, so `session` imports, through it, the module of the rosbridge client, without using it. The session only ever calls `Robot.execute`, and the tests give it a fake.
+Every part also imports `robotfile`, for the `Catalogue`: those arrows are left out, as are the ones of `cli` to `robot` and `robotfile`.
+
+The modules, part by part:
+
+| Part | Module | Responsibility |
+|---|---|---|
+| `cli` | `cli` | The arguments, and `serve`. |
+| `tools` | `check` | Prepares every example of a robot file without a robot. |
+| | `docs` | `commands.md`, from the robot file and its examples. |
+| | `run` | One command on the robot, confirmed on the keyboard. |
+| | `evaluate` | Scores the LLM on the examples, through the proxy. |
+| `conversation` | `server` | The WebSocket server; one `Session` per browser, and its connection to the speech server. It never looks into the events. |
+| | `session` | The rules of [Inside a Session](#inside-a-session): what the bridge hides, says and runs. |
+| | `speaker` | How the bridge's sentences reach the voice: queued, tagged, one at a time; and muting the server's reply. |
+| | `events` | Pure functions on the events of the Realtime API. |
+| | `prompt` | The LLM's instructions. |
+| `llmproxy` | `proxy` | The HTTP server, and the order in which it answers a request. |
+| | `decision` | The request for one JSON decision, and its answer as words or one tool call. |
+| | `guard` | A reply that pretends to act, or asks to confirm. |
+| | `chat` | Pure functions on the messages of chat completions. |
+| `scripted` | `scripted` | `exact_speech` and `scripted_sentence`. |
+| `safety` | `phrases` | Yes, no, stop or other. |
+| | `confirmation` | The state machine of the pending command. |
+| `robot` | `planner` | From a tool call to a `Prepared` command: checks, reads, read-back and request. |
+| | `request` | `Request`, `Outcome`, `render_request`, `judge`, and the `Robot` port. |
+| | `rosbridge_robot` | `RosbridgeRobot`, the real `Robot`. |
+| | `rosbridge` | The client of rosbridge's protocol. |
+| `robotfile` | `model` | The frozen dataclasses of a robot file, the tools of the LLM, the check of arguments. |
+| | `loader` | Reads the file and checks all of it. |
+| | `templating` | Jinja2, sandboxed, with typed results and the filters. |
+
+The session uses only the `Robot` port of `robot.request`; `RosbridgeRobot` is given to it by `cli`, and the tests give it a fake. The largest modules are the loader and the session, about 350 lines each with their docstrings.
 
 ## The Objects at Run Time
 
-Once `voicebridge serve` runs, these objects exist. One `Catalogue`, one `Rosbridge` connection and one `LlmProxy` serve every browser; each browser gets its own `Session`, with its own pending command.
+Once `voicebridge serve` runs, these objects exist. One `Catalogue`, one `Rosbridge` connection and one `LlmProxy` serve every browser; each browser gets its own `Session`, with its own pending command and its own `Speaker`.
 
 <!-- The source is diagrams/objects.mmd: change it, then run bin/render-diagrams.sh. -->
 <p align="center"><img src="diagrams/objects.svg" alt="The objects at run time: the BridgeServer makes one Session per browser; the Session holds a Confirmation and a PhraseMatcher and uses the Planner and the Robot, which RosbridgeRobot implements over Rosbridge." width="1230"></p>
@@ -239,7 +264,9 @@ Three small values travel between them. A `Request` is a call with its templates
 
 ## Inside a Session
 
-A `Session`, in [`session.py`](../src/voicebridge/session.py), is the only place where the rules live. It has no WebSocket: it gets events through `from_browser` and `from_upstream`, and sends them through two functions it was given, `to_browser` and `to_upstream`. The tests give it two lists.
+A `Session`, in [`conversation/session.py`](../src/voicebridge/conversation/session.py), is the only place where the rules live. It has no WebSocket: it gets events through `from_browser` and `from_upstream`, and sends them through two functions it was given, `to_browser` and `to_upstream`. The tests give it two lists.
+
+The session decides what the bridge says; a `Speaker`, in [`conversation/speaker.py`](../src/voicebridge/conversation/speaker.py), decides when and how it reaches the voice. The speaker queues the bridge's sentences, tags them, sends one at a time, collects what the voice said, and mutes the server's own replies; it knows nothing of commands. The session tells it `say`, `read_back` or `take_over`, and gets back, at the end of a reply, what the voice said, to check a read-back.
 
 ### The Events It Reads
 
@@ -254,7 +281,7 @@ A robot call is hidden in every form the server sends it: `response.output_item.
 
 ### The Bridge's Own Replies
 
-The bridge speaks by asking the server for a reply: a `response.create` whose `instructions` carry the sentence between the tags `<voicebridge-say>` and `</voicebridge-say>`, with `tool_choice: none`. The server builds its LLM request with those instructions, and the proxy, finding the tags, answers with the sentence itself. Four rules keep these requests from colliding with the server's own work:
+This is the speaker's work. The bridge speaks by asking the server for a reply: a `response.create` whose `instructions` carry the sentence between the tags `<voicebridge-say>` and `</voicebridge-say>`, with `tool_choice: none`. The server builds its LLM request with those instructions, and the proxy, finding the tags, answers with the sentence itself. Four rules keep these requests from colliding with the server's own work:
 
 - **Tagged.** Each request carries `metadata: {voicebridge: vb-<n>}`, which the server echoes in `response.created` and `response.done`. The bridge tells its replies from the server's by the tag, never by timing.
 - **Queued, one at a time.** A reply is sent only when no response is in progress; the next waits for the `response.done` of the one before. A server that refuses one, `conversation_already_has_active_response`, gets it again at its next `response.done`, and the browser never sees the error.
@@ -267,7 +294,7 @@ The speech server answers every turn of the user by itself: VAD, STT, LLM and TT
 
 ## The LLM Proxy
 
-The speech server sends every reply through its LLM: there is no event that makes it say a fixed text. And an LLM asked to "say exactly" a sentence sometimes says another, or answers a command in words without calling it: "I can do that. Moving the camera closer by 10 millimetres.", while nothing moves. The proxy, in [`llmproxy.py`](../src/voicebridge/llmproxy.py), takes the LLM's place for the speech server, so that the bridge decides what reaches the model and what comes back. For each request of the speech server, in order:
+The speech server sends every reply through its LLM: there is no event that makes it say a fixed text. And an LLM asked to "say exactly" a sentence sometimes says another, or answers a command in words without calling it: "I can do that. Moving the camera closer by 10 millimetres.", while nothing moves. The proxy, in the package [`llmproxy`](../src/voicebridge/llmproxy), takes the LLM's place for the speech server, so that the bridge decides what reaches the model and what comes back. For each request of the speech server, in order:
 
 1. **A sentence of the bridge** in the instructions, between the tags: the proxy answers with it, and the model is not asked.
 2. **A request without tools**, e.g. a summary the speech server asks for on its own: passed through as it is.
@@ -275,7 +302,7 @@ The speech server sends every reply through its LLM: there is no event that make
 4. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
 5. **Any other turn**: the model is asked for one decision, below.
 
-The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: with llama-swap, a request naming another model would unload the voice's model and load that one.
+`proxy` holds this order; `chat` reads the request, `decision` writes the request for one decision, described next, and `guard` judges the reply. The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: with llama-swap, a request naming another model would unload the voice's model and load that one.
 
 ### One Decision per Turn
 
@@ -299,9 +326,9 @@ A model that has heard the bridge read commands back starts doing it itself: aft
 
 ## Talking to the Robot
 
-[`rosbridge.py`](../src/voicebridge/rosbridge.py) is a client of [rosbridge's protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros2/ROSBRIDGE_PROTOCOL.md), with the operations of StepIt UI's `rosbridge.ts`: `call_service`, `send_action_goal` and `cancel_action_goal`, `subscribe` for one message, and `publish`. It connects on first use, and again after the connection drops, e.g. while the rig restarts. It never repeats a request: a goal whose end is unknown fails, so that we are told rather than misled.
+[`robot/rosbridge.py`](../src/voicebridge/robot/rosbridge.py) is a client of [rosbridge's protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros2/ROSBRIDGE_PROTOCOL.md), with the operations of StepIt UI's `rosbridge.ts`: `call_service`, `send_action_goal` and `cancel_action_goal`, `subscribe` for one message, and `publish`. It connects on first use, and again after the connection drops, e.g. while the rig restarts. It never repeats a request: a goal whose end is unknown fails, so that we are told rather than misled.
 
-[`robot.py`](../src/voicebridge/robot.py) turns a call into a `Request` with `render_request`, and an answer into an `Outcome` with `judge`, by the call's `success`, `message` and `result` templates. They see `response`, the answer, and `status`, the GoalStatus of an action. Without `success`, an action succeeded when its status is 4 and a service whenever it answered.
+[`robot/request.py`](../src/voicebridge/robot/request.py) turns a call into a `Request` with `render_request`, and an answer into an `Outcome` with `judge`, by the call's `success`, `message` and `result` templates. They see `response`, the answer, and `status`, the GoalStatus of an action. Without `success`, an action succeeded when its status is 4 and a service whenever it answered.
 
 | Timeout | Default | Where |
 |---|---|---|
@@ -331,7 +358,8 @@ There is no second thread because there is no rclpy: a ROS 2 node would need its
 | `test_templating.py` | Typed results, the filters, the sandbox, undefined names. |
 | `test_planner.py` | The order of `prepare`, reads, refusals, outcome sentences. |
 | `test_rosbridge.py` | The client against a fake rosbridge: services, goals and their cancellation, latched topics, fragments, a lost connection; how an objective is judged. |
-| `test_realtime.py` | Injecting the tools, finding and hiding robot calls, tags. |
+| `test_realtime.py` | `conversation/events.py`: injecting the tools, finding and hiding robot calls, tags. |
+| `test_layers.py` | Each part imports only the parts below it, as in [The Parts and Their Modules](#the-parts-and-their-modules). |
 | `test_server.py` | The whole bridge over real WebSockets: a browser with the Agents SDK's subprotocols, a fake speech server and a fake rosbridge, from the tool call to the goal. |
 | `test_stepit_macro.py` | StepIt Macro's file: every example prepares; left is counter-clockwise and negative, closer is negative; the plan of a stack, its marks, the lights' bits; no power off; `commands.md` is up to date. |
 
@@ -346,9 +374,9 @@ Not tested automatically, and how to check it by hand:
 
 **Add a command.** Copy one that looks like it in the robot file, change it, and run `voicebridge check`; the [README](../README.md#adding-a-command) has the steps. Add `examples`: they teach the LLM, test the command, and fill `commands.md`. Regenerate `commands.md` and restart the bridge.
 
-**Add a call.** When a command needs a part of the robot no call reaches, add a call under `calls`: one of `action`, `service`, `topic` (a read) or `publish`, its `type`, its `request` with templates for the values commands give it, and `success` and `message` when the answer says more than "it answered". A call of a standard ROS 2 interface belongs in `src/voicebridge/calls.yaml`, for every robot.
+**Add a call.** When a command needs a part of the robot no call reaches, add a call under `calls`: one of `action`, `service`, `topic` (a read) or `publish`, its `type`, its `request` with templates for the values commands give it, and `success` and `message` when the answer says more than "it answered". A call of a standard ROS 2 interface belongs in `src/voicebridge/robotfile/calls.yaml`, for every robot.
 
-**Add a filter.** When a template would be hard to read without one, e.g. `plural`, add it to `_make_environment` in `templating.py`, with a test. Keep the robot files readable by someone who does not know Jinja2.
+**Add a filter.** When a template would be hard to read without one, e.g. `plural`, add it to `_make_environment` in `robotfile/templating.py`, with a test. Keep the robot files readable by someone who does not know Jinja2.
 
 **Drive another robot.** Write its robot file and start the bridge with it. Nothing in `src/voicebridge` names a robot.
 
@@ -381,3 +409,5 @@ Not tested automatically, and how to check it by hand:
 **Read the robot each time, keep nothing.** A command that needs the robot's state, e.g. the plan of a stack, reads it before its read-back, every time. The bridge keeps no copy that could be stale. The price: a read before the read-back, a few milliseconds.
 
 **`commands.md` is generated.** The list of commands is written from the robot file, by preparing every example, and a test fails when it is out of date. It cannot drift from what the bridge does. The price: its wording is that of the generator, and the robot file is the place to change it.
+
+**Parts by function, with one job per module.** The package is split into packages by what each part does, and a module that did two jobs is two modules: the robot file's model and its loader, the proxy's HTTP server and its decisions, the session's rules and its speaker. A reader looking for the rules of a yes opens `conversation/session.py` and finds only them. The price: more files and longer imports, and a part's place in the layers is a rule that `tests/test_layers.py` must keep.

@@ -3,7 +3,8 @@
 
 import pytest
 
-from voicebridge.catalogue import ArgumentError, RobotFileError, parse, read_yaml
+from voicebridge.robotfile.loader import RobotFileError, parse, read_yaml
+from voicebridge.robotfile.model import ArgumentError
 
 MINIMAL = """
 confirmation:

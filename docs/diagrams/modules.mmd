@@ -46,74 +46,41 @@ config:
     .labelBkg { background: transparent !important; fill: none !important; }
 ---
 flowchart TB
-    subgraph Tools["TOOLS"]
-        cli("<b>cli</b>")
-        docs("<b>docs</b>")
-    end
-    subgraph Conversation["CONVERSATION"]
-        server("<b>server</b>")
-        session("<b>session</b>")
-        llmproxy("<b>llmproxy</b>")
-    end
-    subgraph Robot["ROBOT"]
-        planner("<b>planner</b>")
-        robot("<b>robot</b>")
-        prompt("<b>prompt</b>")
-    end
-    subgraph Model["MODEL"]
-        catalogue("<b>catalogue</b>")
-        confirmation("<b>confirmation</b>")
-        phrases("<b>phrases</b>")
-    end
-    subgraph Foundation["FOUNDATION"]
-        templating("<b>templating</b>")
-        rosbridge("<b>rosbridge</b>")
-        realtime("<b>realtime</b>")
-    end
+    cli("<b>cli</b><br/>arguments · serve")
+    tools("<b>tools</b><br/>check · docs<br/>run · evaluate")
+    conversation("<b>conversation</b><br/>server · session · speaker<br/>events · prompt")
+    llmproxy("<b>llmproxy</b><br/>proxy · decision<br/>guard · chat")
+    scripted("<b>scripted</b><br/>the tags of a sentence")
+    safety("<b>safety</b><br/>phrases · confirmation")
+    robot("<b>robot</b><br/>planner · request<br/>rosbridge_robot · rosbridge")
+    robotfile("<b>robotfile</b><br/>model · loader · templating")
 
-    cli --> server
+    cli --> tools
+    cli --> conversation
     cli --> llmproxy
-    llmproxy --> phrases
-    llmproxy --> realtime
-    cli --> docs
-    docs --> planner
-    server --> session
-    session --> planner
-    session --> confirmation
-    session --> phrases
-    session --> prompt
-    session --> realtime
-    planner --> robot
-    planner --> catalogue
-    robot --> catalogue
-    robot --> rosbridge
-    robot --> templating
-    prompt --> catalogue
-    confirmation --> phrases
-    phrases --> catalogue
-    catalogue --> templating
+    tools --> conversation
+    tools --> robot
+    conversation --> safety
+    conversation --> robot
+    conversation --> scripted
+    llmproxy --> scripted
+    llmproxy --> safety
+    safety --> robotfile
+    robot --> robotfile
 
-    classDef human fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337
     classDef voice fill:#ccfbf1,stroke:#0d9488,stroke-width:2px,color:#134e4a
     classDef mind  fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
-    classDef brain fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#ffffff
     classDef robot fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
     classDef data  fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
     classDef ext   fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a
 
-    class cli,docs ext
-    class server,session,llmproxy voice
-    class planner,robot,prompt robot
-    class catalogue,confirmation,phrases mind
-    class templating,rosbridge,realtime data
+    class cli,tools ext
+    class conversation,llmproxy,scripted voice
+    class safety mind
+    class robot robot
+    class robotfile data
 
-    style Tools fill:#64748b12,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 5,color:#64748b
-    style Conversation fill:#14b8a612,stroke:#14b8a6,stroke-width:1.5px,stroke-dasharray:6 5,color:#0d9488
-    style Robot fill:#f59e0b12,stroke:#f59e0b,stroke-width:1.5px,stroke-dasharray:6 5,color:#d97706
-    style Model fill:#8b5cf612,stroke:#8b5cf6,stroke-width:1.5px,stroke-dasharray:6 5,color:#7c3aed
-    style Foundation fill:#3b82f612,stroke:#3b82f6,stroke-width:1.5px,stroke-dasharray:6 5,color:#2563eb
-
-    linkStyle 0,1,4,5 stroke:#64748b,stroke-width:2px
-    linkStyle 2,3,6,7,8,9,10,11 stroke:#14b8a6,stroke-width:2px
-    linkStyle 12,13,14,15,16,17 stroke:#f59e0b,stroke-width:2px
-    linkStyle 18,19,20 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 0,1,2,3,4 stroke:#64748b,stroke-width:2px
+    linkStyle 5,6,7,8,9 stroke:#14b8a6,stroke-width:2px
+    linkStyle 10 stroke:#8b5cf6,stroke-width:2px
+    linkStyle 11 stroke:#f59e0b,stroke-width:2px

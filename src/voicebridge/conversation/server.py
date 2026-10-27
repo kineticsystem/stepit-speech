@@ -18,9 +18,9 @@ from urllib.parse import urlsplit
 
 import websockets
 
-from voicebridge.catalogue import Catalogue
-from voicebridge.robot import Robot
-from voicebridge.session import Session
+from voicebridge.conversation.session import Session
+from voicebridge.robot.request import Robot
+from voicebridge.robotfile.model import Catalogue
 
 log = logging.getLogger("voicebridge.server")
 
