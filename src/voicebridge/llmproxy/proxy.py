@@ -8,7 +8,7 @@ OpenAI-compatible ``/v1/chat/completions``, and makes sure the model can
 never seem to run a command that the bridge has not read back:
 
 1. **Scripted replies.** When the instructions carry a sentence of the bridge
-   (``realtime.exact_speech``), the proxy answers with that sentence itself and
+   (``scripted.exact_speech``), the proxy answers with that sentence itself and
    never asks the model: the read-back, the outcome and every other sentence
    of the bridge are spoken exactly as written.
 2. **One decision every turn, in JSON.** On a turn with tools, the proxy
@@ -32,6 +32,9 @@ never seem to run a command that the bridge has not read back:
 4. **No follow-up.** After the bridge answers a command, the speech server
    asks the model to go on; the bridge speaks next, so the proxy answers with
    nothing, except after a rejection, which the model explains.
+5. **No summaries.** The speech server's own request to summarise older turns
+   is answered with ``chat.SUMMARY``, without the model, which would retell the
+   bridge's sentences as its own actions; ``SUMMARY`` never reaches the model.
 
 Anything else, e.g. a request with no tools, passes through unchanged.
 """
@@ -47,7 +50,18 @@ from typing import Any
 import aiohttp
 from aiohttp import web
 
-from voicebridge.llmproxy.chat import after_command, chunks, completion, last_user_text, message, scripted, without
+from voicebridge.llmproxy.chat import (
+    after_command,
+    asks_for_summary,
+    chunks,
+    completion,
+    last_user_text,
+    message,
+    scripted,
+    summary,
+    without,
+    without_summary,
+)
 from voicebridge.llmproxy.decision import commands_only, settle, structured
 from voicebridge.llmproxy.guard import Guard, pretends
 from voicebridge.safety.phrases import Meaning, words
@@ -118,6 +132,11 @@ class LlmProxy:
             self._said.append(tuple(words(sentence)))
             return await self._answer(request, body, completion(model, sentence, []))
 
+        if asks_for_summary(body):
+            # The speech server's summary of older turns: the model would retell the bridge's sentences.
+            log.info("Summarised older turns as left out, without the model")
+            return await self._answer(request, body, completion(model, summary(), []))
+
         upstream_body = structured(body)
         if upstream_body is None:
             return await self._pass(request, raw)
@@ -131,7 +150,7 @@ class LlmProxy:
             # Yes, no or stop: the bridge answers it, and the model must not answer it too.
             log.info("Left to the bridge: %r", heard)
             return await self._answer(request, body, completion(model, "", []))
-        upstream_body = without(upstream_body, set(self._said))
+        upstream_body = without(without_summary(upstream_body), set(self._said))
         answer = await self._ask(upstream_body, request.headers)
         if isinstance(answer, web.Response):
             return answer

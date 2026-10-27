@@ -130,7 +130,7 @@ At start, it logs the robot, its commands and the proxy: `StepIt Macro: 15 comma
 
 ### Start the Speech-to-Speech Server
 
-In the speech-to-speech repository, pointing it at the bridge's LLM proxy through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU:
+In the speech-to-speech repository, pointing it at the bridge's LLM proxy through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU, and without summaries of older turns:
 
 ```bash
 uv run speech-to-speech serve \
@@ -138,10 +138,13 @@ uv run speech-to-speech serve \
   --responses_api_base_url "http://127.0.0.1:8767/v1" \
   --responses_api_api_key "" \
   --model_name bonsai-2-27b \
+  --compact_history false \
   --qwen3_tts_ggml_quantization Q8_0
 ```
 
 It takes about a minute to load speech-to-text and the voice. It listens on `ws://127.0.0.1:8765/v1/realtime`.
+
+`--compact_history false` makes it drop the oldest turn once it keeps more than `--chat_size`, 30 by default, instead of asking the LLM to summarise the older ones. A summary would retell the bridge's read-backs as the model's own actions, which teaches it to pretend. Should a summary be asked for anyway, the proxy answers it without the model.
 
 > [!IMPORTANT]
 > The speech server must reach its LLM through the bridge, port 8767, never directly, port 8085: otherwise the LLM writes the read-back in its own words, and the bridge refuses to arm a command it did not hear word for word.

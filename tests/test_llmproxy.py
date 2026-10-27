@@ -11,7 +11,15 @@ import aiohttp
 import pytest
 from aiohttp import web
 
-from voicebridge.llmproxy.chat import chunks, completion, scripted
+from voicebridge.llmproxy.chat import (
+    SUMMARY,
+    asks_for_summary,
+    chunks,
+    completion,
+    scripted,
+    summary,
+    without_summary,
+)
 from voicebridge.llmproxy.decision import REPLY, commands_only, settle, structured
 from voicebridge.llmproxy.guard import Guard, asks_to_confirm, pretends
 from voicebridge.llmproxy.proxy import SAY_AGAIN, LlmProxy
@@ -30,6 +38,15 @@ def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 def decision(**fields: Any) -> dict[str, Any]:
     """The model's answer, as the JSON decision the proxy asks for."""
     return {"role": "assistant", "content": json.dumps(fields)}
+
+
+# The speech server's request to summarise older turns, as its chat-completions backend sends it.
+SUMMARY_REQUEST = {"model": "m", "messages": [
+    {"role": "system", "content": 'You are a conversation memory compressor.\nOutput a single JSON object with exactly '
+                                  'two string fields:\n  "user_summary" ...\n  "assistant_summary" ...'},
+    {"role": "user", "content": "Summarize the following conversation.\n[user] 10 degrees left\n"
+                                "[assistant] Rotating the stage 10 degrees counter-clockwise. Confirm?"},
+]}
 
 
 def system(text: str) -> dict[str, Any]:
@@ -69,6 +86,21 @@ def test_a_turn_with_tools_asks_for_one_json_decision():
 def test_a_turn_without_tools_or_with_tools_off_is_left_alone():
     assert structured({"messages": []}) is None
     assert structured({"tools": [MOVE], "tool_choice": "none", "messages": []}) is None
+
+
+def test_the_summary_of_older_turns_is_found_and_written_by_the_proxy():
+    assert asks_for_summary(SUMMARY_REQUEST)
+    assert not asks_for_summary({"messages": [{"role": "user", "content": "Summarise."}]})
+    assert not asks_for_summary({**SUMMARY_REQUEST, "tools": [MOVE]})
+    # The speech server needs both fields, not empty, or it keeps every turn.
+    assert json.loads(summary()) == {"user_summary": SUMMARY, "assistant_summary": SUMMARY}
+
+
+def test_the_summary_is_kept_out_of_the_history():
+    history = [system("Hi."), {"role": "user", "content": SUMMARY},
+               {"role": "assistant", "content": [{"type": "text", "text": SUMMARY}]},
+               {"role": "user", "content": "2 mm closer"}]
+    assert [m["content"] for m in without_summary({"messages": history})["messages"][1:]] == ["2 mm closer"]
 
 
 def test_a_command_becomes_a_tool_call():
@@ -193,6 +225,19 @@ async def test_a_request_without_tools_passes_through(proxied):
     assert llm.requests[0]["stream"] is True
     async with client.get(url + "/models") as reply:
         assert (await reply.json())["data"][0]["id"] == "fake"
+
+
+async def test_the_summary_of_older_turns_never_reaches_the_model(proxied):
+    llm, client, url = proxied
+    async with client.post(url + "/chat/completions", json=SUMMARY_REQUEST) as reply:
+        answer = await reply.json()
+    assert json.loads(answer["choices"][0]["message"]["content"]) == json.loads(summary())
+    assert llm.requests == []
+    llm.message = decision(reply="Up to 360 degrees.")
+    history = [system("Hi."), {"role": "user", "content": SUMMARY}, {"role": "assistant", "content": SUMMARY},
+               {"role": "user", "content": "how far can it turn?"}]
+    await stream(client, url, {"model": "m", "tools": [MOVE], "messages": history})
+    assert [m.get("content") for m in llm.requests[0]["messages"][1:]] == ["how far can it turn?"]
 
 
 def test_a_reply_that_asks_to_confirm_is_caught():

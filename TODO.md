@@ -14,7 +14,5 @@
   - It brings opentelemetry, pydantic-graph and httpx with it.
 
   Try it on a branch, on `_ask` of `llmproxy/proxy.py` only: keep it if it removes code and `voicebridge eval` still scores 35 of 35; otherwise note why here and drop it.
-- **Keep a short history, without summaries.** The speech server keeps the last `chat_size` turns, 30 by default, and with `compact_history`, on by default, asks the LLM to summarise the older ones. The summary request has no tools, so the proxy passes it to the model, which then retells the bridge's read-backs and outcomes in its own words: "The assistant rotated the stage". The proxy cannot remove a paraphrase, and the model sees itself acting again, which makes it pretend. Our commands stand alone, so a few turns are enough.
-  - Start the speech server with summaries off and a short history, probably `--compact_history false --chat_size 8`: check the names with `uv run speech-to-speech serve --help`, then add them to the README.
-  - Make the proxy handle the summary request on its own, e.g. answer it with empty summaries, and test it in `test_llmproxy.py`.
+- **Try a shorter history on the GPU computer.** The speech server keeps the last 30 turns. Our commands stand alone, so `--chat_size 8` might be enough, with shorter prompts and fewer old turns to imitate: keep it if `voicebridge eval` still scores 35 of 35 and a voice session of more than 8 turns still works.
 - **"Stop it" stops twice**: the bridge stops the rig, and the sentence also goes to the LLM, which calls `stop` again. Harmless; "it" could become a filler.
