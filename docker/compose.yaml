@@ -1,0 +1,81 @@
+# The voice's LLM and the bridge, started together by ./docker/dock.sh serve:
+# llama-server on Ternary Bonsai 2 27B, then the bridge, once the model is
+# loaded. Both use the host's network: the speech server reaches the bridge's
+# LLM proxy on 8767, which asks llama-server on 8085.
+#
+# dock.sh sets ROBOT, HOST_UID and HOST_GID, and downloads the model first.
+
+name: stepit-speech
+
+services:
+  llm:
+    image: stepit-speech-llm
+    build:
+      context: ../engines/llama.cpp
+      dockerfile: ../../docker/llm.Dockerfile
+      args:
+        CUDA_ARCHITECTURES: ${CUDA_ARCHITECTURES:-89}
+    network_mode: host
+    gpus: all
+    volumes:
+      - ../models:/models:ro
+    # One model, always loaded, for one voice. The model card's sampling. No thinking:
+    # a command is one JSON object, and thinking first only makes the answer slower.
+    command:
+      - --model
+      - /models/Ternary-Bonsai-2-27B-Q2_0-prism-fork-required.gguf
+      - --alias
+      - bonsai-2-27b
+      - --host
+      - 127.0.0.1
+      - --port
+      - "${LLM_PORT:-8085}"
+      - --parallel
+      - "1"
+      - --ctx-size
+      - "8192"
+      - --n-gpu-layers
+      - "999"
+      - --flash-attn
+      - "on"
+      - --jinja
+      - --reasoning
+      - "off"
+      - --temp
+      - "1.0"
+      - --top-p
+      - "0.95"
+      - --top-k
+      - "20"
+      - --min-p
+      - "0.05"
+      - --no-ui
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:${LLM_PORT:-8085}/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      # Loading 7.6 GB into the GPU.
+      start_period: 300s
+      start_interval: 2s
+
+  bridge:
+    image: stepit-speech
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    network_mode: host
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /app
+    volumes:
+      - ..:/app
+    environment:
+      VOICEBRIDGE_LLM_URL: http://127.0.0.1:${LLM_PORT:-8085}/v1
+      VOICEBRIDGE_UPSTREAM:
+      VOICEBRIDGE_ROSBRIDGE:
+      VOICEBRIDGE_LISTEN:
+      VOICEBRIDGE_LLM_LISTEN:
+    command: ["voicebridge", "serve", "${ROBOT:-robots/stepit-macro/robot.yaml}"]
+    depends_on:
+      llm:
+        condition: service_healthy

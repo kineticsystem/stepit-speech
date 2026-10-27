@@ -23,6 +23,7 @@
 - [The LLM Proxy](#the-llm-proxy)
   - [One Decision per Turn](#one-decision-per-turn)
   - [What the Model Never Sees](#what-the-model-never-sees)
+  - [The LLM Behind It](#the-llm-behind-it)
 - [Talking to the Robot](#talking-to-the-robot)
 - [Threads and Time](#threads-and-time)
 - [Tests](#tests)
@@ -39,7 +40,7 @@ An example from everyday life, outside software, shows the idea: a waiter in a r
 
 ## The Big Picture
 
-Five programs take part. The bridge is the only one of this project; the others are used as they are.
+Five programs take part. Two run from this project: the bridge, and the LLM server, `llama-server` of llama.cpp, built from a submodule and started with the bridge. The others are used as they are.
 
 <!-- The source is diagrams/big-picture.mmd: change it, then run bin/render-diagrams.sh. -->
 <p align="center"><img src="diagrams/big-picture.svg" alt="The browser demo talks to voicebridge; voicebridge talks to the Speech-to-Speech server, whose LLM proxy asks the LLM for one JSON decision, and sends confirmed commands through rosbridge to StepIt Commander and the drivers of StepIt Macro." width="871"></p>
@@ -53,7 +54,7 @@ The bridge also sits on the speech server's way to its LLM. The speech server as
 | `ws://0.0.0.0:8766/v1/realtime` | WebSocket server | Where the browser connects, instead of the speech server. One session per browser. |
 | `ws://127.0.0.1:8765/v1/realtime` | WebSocket client | The speech server. The bridge opens one connection per browser, with the browser's own subprotocols. |
 | `http://127.0.0.1:8767/v1/chat/completions` | HTTP server | The LLM proxy, the speech server's LLM. Any other path passes through. |
-| `http://localhost:8085/v1` | HTTP client | The LLM, any OpenAI-compatible server that enforces a JSON schema, e.g. llama.cpp. |
+| `http://127.0.0.1:8085/v1` | HTTP client | The LLM: `llama-server` on Bonsai 2 27B, started with the bridge. Any OpenAI-compatible server that enforces a JSON schema works. |
 | `ws://localhost:9090` | WebSocket client | rosbridge, for every request to the robot. One connection for the whole bridge. |
 | `robots/<robot>/robot.yaml` | File | Everything about the robot: its commands, how they reach it, the words of yes, no and stop. |
 | `voicebridge serve`, `check`, `docs`, `run`, `eval` | Command line | The bridge, and the tools that try a robot file without a voice. |
@@ -302,7 +303,7 @@ The speech server sends every reply through its LLM: there is no event that make
 4. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
 5. **Any other turn**: the model is asked for one decision, below.
 
-`proxy` holds this order; `chat` reads the request, `decision` writes the request for one decision, described next, and `guard` judges the reply. The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: with llama-swap, a request naming another model would unload the voice's model and load that one.
+`proxy` holds this order; `chat` reads the request, `decision` writes the request for one decision, described next, and `guard` judges the reply. The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: a server of several models would otherwise answer a request that names another one, e.g. a summary the speech server asks for on its own, with another model. `llama-server` serves one, and needs none of this.
 
 ### One Decision per Turn
 
@@ -323,6 +324,14 @@ A reply can still pretend. The proxy refuses a reply that asks to confirm, or th
 ### What the Model Never Sees
 
 A model that has heard the bridge read commands back starts doing it itself: after a few turns it answers "Switching the lights on. Confirm?" without calling the command. So the proxy removes from the history every sentence it said in the model's place, the read-backs, outcomes and greeting, before it asks the model. The model sees our requests and its own calls, never the bridge's words. And it never sees the turn of a yes, a no or a stop, which the proxy answers with nothing.
+
+### The LLM Behind It
+
+The LLM is part of the project. [llama.cpp](https://github.com/ggml-org/llama.cpp) is a Git submodule, in `engines/llama.cpp`, pinned to release b11840: Bonsai's `Q2_0` weights need b11555 or newer. [`docker/llm.Dockerfile`](../docker/llm.Dockerfile) compiles its `llama-server` with CUDA for one GPU architecture, 89 for the RTX 4090, in an image of its own: the image of the bridge and the tests needs no GPU, and CI never builds the LLM.
+
+[`docker/compose.yaml`](../docker/compose.yaml) starts two containers, `llm` and `bridge`, on the host's network, and starts the bridge only once `llama-server` answers `/health`, when the model is loaded. [`bin/download-model.sh`](../bin/download-model.sh) downloads the model first, into `models/`, pinned to one revision of its repository on Hugging Face, and checks its SHA-256.
+
+`llama-server` serves one model, always loaded, for one voice: `--parallel 1`, an 8K context, every layer on the GPU, flash attention, the model card's sampling, and the alias `bonsai-2-27b`. Thinking is off, with `--reasoning off`: a command is one JSON object that the schema already constrains, and thinking first would make every answer seconds slower without making it better on our examples.
 
 ## Talking to the Robot
 
@@ -407,6 +416,8 @@ Not tested automatically, and how to check it by hand:
 **A session cancels its goals when it ends.** A tab that closes during a focus stack stops it. We cannot stop by voice a robot whose session is gone, so the bridge does not let one move. The price: a long stack needs the page to stay open, as StepIt UI's sliders do.
 
 **Read the robot each time, keep nothing.** A command that needs the robot's state, e.g. the plan of a stack, reads it before its read-back, every time. The bridge keeps no copy that could be stale. The price: a read before the read-back, a few milliseconds.
+
+**llama.cpp in the project, one model.** The project builds and starts its own `llama-server`, with one model, always loaded, so that it runs on a computer with nothing else installed but Docker and the NVIDIA Container Toolkit, and no other model can take the voice's place on the GPU. There is no server of several models in front of it. The price: the image of the LLM takes about 10 minutes to compile on 12 cores, is built for one GPU architecture, and must be rebuilt when the submodule moves to a newer release.
 
 **`commands.md` is generated.** The list of commands is written from the robot file, by preparing every example, and a test fails when it is out of date. It cannot drift from what the bridge does. The price: its wording is that of the generator, and the robot file is the place to change it.
 

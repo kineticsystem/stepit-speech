@@ -106,7 +106,7 @@ class LlmProxy:
         if not isinstance(body, dict):
             return await self._pass(request, raw)
         if self._model:
-            # Every request, the ones passed through included: llama-swap would otherwise
+            # Every request, the ones passed through included: a server of several models would otherwise
             # swap the chosen model out for the one the speech server names.
             body["model"] = self._model
             raw = json.dumps(body).encode()

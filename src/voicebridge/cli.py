@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("robot")
     evaluate.add_argument("--llm", default="http://localhost:8767/v1",
                           help="the bridge's LLM proxy, which asks the LLM as the bridge does (default %(default)s)")
-    evaluate.add_argument("--model", default=os.environ.get("VOICEBRIDGE_LLM_MODEL", "stepit-macro-bonsai"))
+    evaluate.add_argument("--model", default=os.environ.get("VOICEBRIDGE_LLM_MODEL", "bonsai-2-27b"))
     evaluate.add_argument("--say", action="append", help="a phrase to try instead of the examples; repeatable")
     evaluate.add_argument("--think", action="store_true", help="let the model think first")
 
