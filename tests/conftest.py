@@ -13,7 +13,7 @@ import pytest
 import websockets
 
 from voicebridge.robot.request import Outcome, Request
-from voicebridge.robotfile.loader import load
+from voicebridge.robotfile.loader import load, parse, read_yaml
 from voicebridge.robotfile.model import Catalogue
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,6 +24,17 @@ STEPIT_MACRO = ROOT / "robots" / "stepit-macro" / "robot.yaml"
 @pytest.fixture
 def arm() -> Catalogue:
     return load(ARM)
+
+
+# The sleep section of the test arm, for the tests of the sleep mode.
+SLEEP = {"wake": ["Wake up, robot", "wake up robots"], "examples": ["go to sleep", "take a nap"]}
+
+
+@pytest.fixture
+def sleepy_arm() -> Catalogue:
+    """The test arm, with a sleep mode."""
+    data = read_yaml(ARM.read_text(encoding="utf-8"))
+    return parse({**data, "sleep": SLEEP}, source=str(ARM))
 
 
 @pytest.fixture

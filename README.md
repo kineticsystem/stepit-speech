@@ -13,10 +13,11 @@
     - [Build the Images](#build-the-images)
   - [Running the Application](#running-the-application)
     - [Start the Rig](#start-the-rig)
-    - [Start the LLM and the Bridge](#start-the-llm-and-the-bridge)
-    - [Start the Speech-to-Speech Server](#start-the-speech-to-speech-server)
+    - [Start the Voice](#start-the-voice)
+    - [The Speech-to-Speech Server](#the-speech-to-speech-server)
     - [Start the Browser Demo](#start-the-browser-demo)
     - [Talk to the Rig](#talk-to-the-rig)
+    - [Talk From a Phone](#talk-from-a-phone)
   - [The Commands](#the-commands)
   - [Adding a Command](#adding-a-command)
   - [Trying Commands Without a Voice](#trying-commands-without-a-voice)
@@ -71,22 +72,23 @@ git clone --recurse-submodules git@github.com:kineticsystem/stepit-speech.git
 cd stepit-speech
 ```
 
-[llama.cpp](https://github.com/ggml-org/llama.cpp), which serves the LLM, is a submodule, in `engines/llama.cpp`. A clone without `--recurse-submodules` gets it the first time `./docker/dock.sh serve` runs.
+[llama.cpp](https://github.com/ggml-org/llama.cpp), which serves the LLM, and [Speech-to-Speech](https://github.com/huggingface/speech-to-speech), the speech server, are submodules, in `engines/llama.cpp` and `engines/speech-to-speech`. A clone without `--recurse-submodules` gets them the first time `./docker/dock.sh serve` runs.
 
 ### Build the Images
 
-Two images: one holds the bridge, its tools and its tests; the other holds `llama-server`, compiled with CUDA, which takes about 10 minutes on 12 cores:
+Three images: one holds the bridge, its tools and its tests; one holds `llama-server`, compiled with CUDA, which takes about 10 minutes on 12 cores; and one holds the speech server, with CUDA and PyTorch, about 11 GB:
 
 ```bash
 ./docker/dock.sh build
 ./docker/dock.sh build-llm
+./docker/dock.sh build-speech
 ```
 
 `build-llm` compiles for the RTX 4090, CUDA architecture 89. For another GPU, give its architecture, e.g. 86 for an RTX 3090: `CUDA_ARCHITECTURES=86 ./docker/dock.sh build-llm`.
 
 ## Running the Application
 
-Five programs run together, in four terminals: one command starts the LLM and the bridge. Start them in this order.
+Five programs run together, in three terminals: one command starts the LLM, the bridge and the speech server. Start them in this order.
 
 ### Start the Rig
 
@@ -98,13 +100,19 @@ In the stepit-macro repository:
 
 Its rosbridge listens on port 9090, the address in [`robots/stepit-macro/robot.yaml`](robots/stepit-macro/robot.yaml).
 
-### Start the LLM and the Bridge
+### Start the Voice
 
 ```bash
 ./docker/dock.sh serve
 ```
 
-It starts two containers on the host's network. First the LLM: `llama-server` on Bonsai 2 27B, PrismML's ternary build of Qwen3.8-27B, on port 8085, with an 8K context, which voice turns never exceed, and thinking off, so that a command comes in about half a second. Then, once the model is loaded, the bridge. Ctrl-C stops both.
+It starts three containers on the host's network. First the LLM: `llama-server` on Bonsai 2 27B, PrismML's ternary build of Qwen3.8-27B, on port 8085, with an 8K context, which voice turns never exceed, and thinking off, so that a command comes in about half a second. Then, once the model is loaded, the bridge, and the speech server, which takes about a minute more to load speech-to-text and the voice. Ctrl-C stops all three.
+
+For a rig on another computer, give its rosbridge; and when port 8085 is taken, another port for the LLM:
+
+```bash
+VOICEBRIDGE_ROSBRIDGE=ws://stepit.local:9090 LLM_PORT=8086 ./docker/dock.sh serve
+```
 
 The first time, it downloads the model, `Ternary-Bonsai-2-27B-Q2_0-prism-fork-required.gguf`, 7.6 GB, from [prism-ml/Ternary-Bonsai-2-27B-gguf-dev](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf-dev), into `models/`, and checks its SHA-256; an interrupted download resumes. `./docker/dock.sh models` downloads it alone.
 
@@ -120,7 +128,7 @@ The bridge listens for the browser on port 8766 and forwards to the speech serve
 
 The container cannot resolve mDNS names such as `stepit.local`. `dock.sh` resolves on the host every `.local` name in the robot file, `VOICEBRIDGE_ROSBRIDGE`, `VOICEBRIDGE_UPSTREAM` and `VOICEBRIDGE_LLM_URL`, and passes it to the bridge's container. The address is fixed when the bridge starts: when the rig's address changes, restart the bridge.
 
-To try the bridge against another LLM server, start the bridge alone, pointed at it. The server must enforce a JSON schema, as `llama-server` does:
+To try the bridge against another LLM server, start the bridge alone, pointed at it, and the speech server as [below](#the-speech-to-speech-server). The server must enforce a JSON schema, as `llama-server` does:
 
 ```bash
 VOICEBRIDGE_LLM_URL=http://localhost:8090/v1 ./docker/dock.sh bridge
@@ -128,11 +136,13 @@ VOICEBRIDGE_LLM_URL=http://localhost:8090/v1 ./docker/dock.sh bridge
 
 `VOICEBRIDGE_LLM_MODEL` names the model every request asks for, whatever the speech server names, for a server that serves several. Ours serves one, and ignores the name.
 
-At start, it logs the robot, its commands and the proxy: `StepIt Macro: 15 commands, rosbridge at ws://localhost:9090` and `LLM proxy on http://127.0.0.1:8767/v1, forwarding to http://127.0.0.1:8085/v1`.
+At start, it logs the robot, its commands and the proxy: `StepIt Macro: 16 commands, rosbridge at ws://localhost:9090` and `LLM proxy on http://127.0.0.1:8767/v1, forwarding to http://127.0.0.1:8085/v1`.
 
-### Start the Speech-to-Speech Server
+### The Speech-to-Speech Server
 
-In the speech-to-speech repository, pointing it at the bridge's LLM proxy through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU, and without summaries of older turns:
+`./docker/dock.sh serve` starts it from the submodule, as the host's user, with the models of the host's `~/.cache`: `huggingface` for speech-to-text and the voice, `torch` for the voice detection, and `faster-qwen3-tts` for the voice's references. The first start downloads them there, about 5 GB; a computer that ran `uv run speech-to-speech` already has them. It points the speech server at the bridge's LLM proxy through the chat completions API, with its default voice, Qwen3-TTS's "Aiden", in 8 bits, which saves 1.6 GB of the GPU, and without summaries of older turns.
+
+With `./docker/dock.sh bridge`, start it in the speech-to-speech repository, with the same options:
 
 ```bash
 uv run speech-to-speech serve \
@@ -141,12 +151,15 @@ uv run speech-to-speech serve \
   --responses_api_api_key "" \
   --model_name bonsai-2-27b \
   --compact_history false \
-  --qwen3_tts_ggml_quantization Q8_0
+  --qwen3_tts_ggml_quantization Q8_0 \
+  --min_speech_ms 192
 ```
 
-It takes about a minute to load speech-to-text and the voice. It listens on `ws://127.0.0.1:8765/v1/realtime`.
+It listens on `ws://127.0.0.1:8765/v1/realtime`, and on this computer only: the bridge is its client.
 
 `--compact_history false` makes it drop the oldest turn once it keeps more than `--chat_size`, 30 by default, instead of asking the LLM to summarise the older ones. A summary would retell the bridge's read-backs as the model's own actions, which teaches it to pretend. Should a summary be asked for anyway, the proxy answers it without the model.
+
+`--min_speech_ms 192` keeps a short "yes". With the default, 384 ms of voice, the speech server threw away most of ours, which have 200 to 350 ms: we said yes, and nothing happened.
 
 > [!IMPORTANT]
 > The speech server must reach its LLM through the bridge, port 8767, never directly, port 8085: otherwise the LLM writes the read-back in its own words, and the bridge refuses to arm a command it did not hear word for word.
@@ -174,6 +187,18 @@ Open <http://localhost:7860>, press the button and allow the microphone. The voi
 3. "Yes." The rail moves, and the voice says "The camera moved 2 millimetres closer."
 
 Say "no", or anything else, to cancel; say "stop" at any time to stop the rig. When a value is missing, e.g. "move the camera closer", the voice asks for it: "How many millimetres closer?". Watch the rig in StepIt UI, <http://localhost:8070>.
+
+To talk to someone else without the voice hearing a command, put it to sleep: "Goodnight StepIt", then "yes". Asleep, it hears only "stop", which still stops the rig, and the wake phrase, as a sentence of its own: "Wake up". The phrases are in the robot file's `sleep` section; [`commands.md`](robots/stepit-macro/commands.md) lists them.
+
+### Talk From a Phone
+
+The Android app of [`android-ui`](android-ui/README.md) takes the place of the browser demo, with the phone in a pocket and a headset on. It connects to the bridge on port 8766, over the Wi-Fi, and keeps listening with the screen locked. Build it and install it:
+
+```bash
+./docker/dock.sh build-android
+./docker/dock.sh android
+adb install -r android-ui/app/build/outputs/apk/debug/app-debug.apk
+```
 
 ## The Commands
 

@@ -49,6 +49,14 @@ confirmation:
   # The command the stop words run.
   stop_command: stop
 
+# The voice can sleep. We put it to sleep in our own words, and confirm; asleep, it
+# hears nothing but stop and the wake phrase, as the last sentence we say. The
+# first phrase is the one the phone shows; the others are how speech-to-text may
+# write it. No example may hold a stop word: "stop listening" would stop the rig.
+sleep:
+  wake: [Wake up, wakeup]
+  examples: [go to sleep, goodnight StepIt, take a break]
+
 # How the commands reach the rig. The calls of standard ROS 2 interfaces,
 # get_parameters, set_parameters, trigger and read_latched_topic, come with
 # voicebridge (src/voicebridge/robotfile/calls.yaml).
@@ -142,19 +150,21 @@ commands:
 
   manual_drive:
     description: >-
-      Hands the rig to the gamepad and the sliders (on), or takes it back for the commands (off).
+      Enables teleoperation (on), so that the rig is driven by hand, with the gamepad or the sliders, or disables
+      it (off), to take the rig back for the commands.
     parameters:
       state: [on, off]
-    say: "{{ 'Handing the rig to the gamepad.' if state == 'on' else 'Taking the rig back from the gamepad.' }}"
+    say: "{{ 'Enabling teleoperation.' if state == 'on' else 'Disabling teleoperation.' }}"
     run:
       objective:
         name: "{{ 'ActivateTeleop' if state == 'on' else 'ActivateController' }}"
         payload: "{{ {} if state == 'on' else {'controllers': 'joint_trajectory_controller'} }}"
-    done: "{{ 'The gamepad drives the rig.' if state == 'on' else 'The gamepad is off.' }}"
+    done: "{{ 'Teleoperation enabled.' if state == 'on' else 'Teleoperation disabled.' }}"
     examples:
+      - enable teleoperation: {state: "on"}
       - switch on manual drive: {state: "on"}
       - give me the gamepad: {state: "on"}
-      - turn manual drive off: {state: "off"}
+      - turn teleoperation off: {state: "off"}
 
   stop:
     description: Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop.

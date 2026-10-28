@@ -20,8 +20,11 @@ Everything is built and tested in the image of `docker/Dockerfile`, as CI does; 
 ./docker/dock.sh build    # the image
 ./docker/dock.sh test     # bin/test.sh: ruff, voicebridge check of every robot file, pytest
 ./docker/dock.sh build-llm  # the image of llama-server, with CUDA
-./docker/dock.sh serve    # the LLM, then the bridge, on the host's network
+./docker/dock.sh build-speech  # the image of the speech server, with CUDA and PyTorch
+./docker/dock.sh serve    # the LLM, then the bridge, then the speech server, on the host's network
 ./docker/dock.sh shell
+./docker/dock.sh build-android  # the image of the Android SDK
+./docker/dock.sh android  # the Android app's unit tests and debug APK, android-ui/app/build/outputs/apk/debug
 ```
 
 A virtual environment works too: `uv venv && uv pip install -e '.[dev]' && bin/test.sh`.
@@ -31,7 +34,9 @@ A virtual environment works too: `uv venv && uv pip install -e '.[dev]' && bin/t
 - `voicebridge run <robot file> <command> name=value...` runs one command on the robot, asking first.
 - `voicebridge eval <robot file>` scores the LLM on the examples, through the running bridge's proxy (`http://localhost:8767/v1`, model `bonsai-2-27b`); not in CI.
 
-The LLM must enforce a JSON schema (`response_format`): llama.cpp does, azllm does not. The voice uses Bonsai 2 27B on `llama-server` of the submodule `engines/llama.cpp` (release b11840), in its own CUDA image (`docker/llm.Dockerfile`, `./docker/dock.sh build-llm`); `./docker/dock.sh serve` downloads the model into `models/` (`bin/download-model.sh`) and starts it with the bridge (`docker/compose.yaml`), thinking off. The test image and CI never build it: keep them free of the GPU. `./docker/dock.sh bridge` runs the bridge alone, against another LLM.
+The LLM must enforce a JSON schema (`response_format`): llama.cpp does, azllm does not. The voice uses Bonsai 2 27B on `llama-server` of the submodule `engines/llama.cpp` (release b11840), in its own CUDA image (`docker/llm.Dockerfile`, `./docker/dock.sh build-llm`); `./docker/dock.sh serve` downloads the model into `models/` (`bin/download-model.sh`) and starts it with the bridge (`docker/compose.yaml`), thinking off. The speech server is Speech-to-Speech of the submodule `engines/speech-to-speech`, in its own image (`docker/speech.Dockerfile`), started by `serve` as the host's user with the host's `~/.cache` for its models. The test image and CI build neither: keep them free of the GPU. `./docker/dock.sh bridge` runs the bridge alone, against another LLM.
+
+The Android app, `android-ui` (Kotlin, Jetpack Compose, OkHttp), replaces the browser demo on a phone in a pocket: it carries the audio and shows the state, and decides nothing about the robot. Its unit tests run on the JVM against a fake bridge (`MockWebServer`); keep the audio, the service and the screen thin, and the logic in `protocol` and `voice`, where the tests reach it. Its image (`docker/android.Dockerfile`) is apart from the test image and CI.
 
 A test that talks to a robot uses the fakes of `tests/conftest.py`, never the real rig. Run commands on the real rig only with fake hardware (`use_dummy`, `fake`, `use_fake` in stepit-macro's `rig.yaml`), unless the user asks otherwise, and restore any state changed, e.g. the plan of the stack.
 

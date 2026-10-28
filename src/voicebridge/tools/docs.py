@@ -14,7 +14,7 @@ import re
 
 from voicebridge.robot.planner import Planner
 from voicebridge.robot.request import Outcome
-from voicebridge.robotfile.model import Catalogue, Command, Parameter
+from voicebridge.robotfile.model import SLEEP_COMMAND, Catalogue, Command, Parameter
 
 
 def _anchor(title: str) -> str:
@@ -32,6 +32,8 @@ def _values(parameter: Parameter) -> str:
 
 
 def _flags(command: Command) -> str:
+    if command.name == SLEEP_COMMAND:
+        return "yes"
     if command.is_query:
         return "no, it changes nothing"
     return "yes" if command.confirm else "no, it runs at once"
@@ -50,6 +52,10 @@ async def generate(catalogue: Catalogue, source: str) -> str:
         "",
         "- [Introduction](#introduction)",
         "- [Confirming and Stopping](#confirming-and-stopping)",
+    ]
+    if catalogue.sleep:
+        lines.append("- [Sleeping and Waking](#sleeping-and-waking)")
+    lines += [
         "- [The Commands at a Glance](#the-commands-at-a-glance)",
         "- [The Commands](#the-commands)",
     ]
@@ -89,6 +95,27 @@ async def generate(catalogue: Catalogue, source: str) -> str:
         "> The voice stop takes about a second, the time to hear the end of the sentence and transcribe it. "
         "It does not replace the stop of the gamepad or of the page.",
         "",
+    ]
+    if catalogue.sleep:
+        sleep = catalogue.sleep
+        wake = ", ".join(f'"{phrase}"' for phrase in sleep.wake)
+        lines += [
+            "## Sleeping and Waking",
+            "",
+            "The voice can sleep, so that we talk to others without it hearing a command:",
+            "",
+            f"- **Sleep** with [`{SLEEP_COMMAND}`](#{_anchor(SLEEP_COMMAND)}), in our own words, e.g. "
+            f"\"{sleep.example}\". It is read back and confirmed like any command, and runs nothing on the robot. "
+            f"The voice says \"{sleep.asleep}\"",
+            "- **Asleep**, it hears nothing but stop and the wake phrase: nothing reaches the LLM, and the voice "
+            "stays silent. Stop still stops the robot.",
+            f"- **Wake** it with exactly one of: {wake}, as a sentence of its own, "
+            "with nothing after it. "
+            f"The voice says \"{sleep.awake}\"",
+            "- A session starts awake.",
+            "",
+        ]
+    lines += [
         "## The Commands at a Glance",
         "",
         "| Command | What it does | Confirmed |",
@@ -117,6 +144,10 @@ async def _command_section(planner: Planner, catalogue: Catalogue, name: str, co
         prepared = await planner.prepare(name, example.expect, reads=example.reads)
         arguments = ", ".join(f"{key}: {value!r}" for key, value in prepared.arguments.items() if value is not None)
         lines += [f"**\"{example.phrase}\"** becomes `{name}({arguments})`.", ""]
+        if command.name == SLEEP_COMMAND and catalogue.sleep:
+            lines += [f"- It reads back: \"{prepared.sentence} {catalogue.confirmation.prompt}\"",
+                      f"- It runs nothing on the robot. The voice says: \"{catalogue.sleep.asleep}\"", ""]
+            continue
         if command.is_query:
             lines += [f"- It answers: \"{prepared.sentence}\"", ""]
             continue

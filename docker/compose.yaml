@@ -1,9 +1,11 @@
-# The voice's LLM and the bridge, started together by ./docker/dock.sh serve:
-# llama-server on Ternary Bonsai 2 27B, then the bridge, once the model is
-# loaded. Both use the host's network: the speech server reaches the bridge's
-# LLM proxy on 8767, which asks llama-server on 8085.
+# The whole voice, started together by ./docker/dock.sh serve: llama-server on
+# Ternary Bonsai 2 27B, then the bridge, once the model is loaded, then the
+# speech server. All three use the host's network: the phone or the browser
+# reaches the bridge on 8766, which reaches the speech server on 8765, which
+# reaches the bridge's LLM proxy on 8767, which asks llama-server on 8085.
 #
-# dock.sh sets ROBOT, HOST_UID and HOST_GID, and downloads the model first.
+# dock.sh sets ROBOT, HOST_UID and HOST_GID, downloads the model, and makes the
+# speech server's cache folders, so that they are the user's, not root's.
 
 name: stepit-speech
 
@@ -79,3 +81,43 @@ services:
     depends_on:
       llm:
         condition: service_healthy
+
+  # The speech server, on 8765: it listens, transcribes, asks the bridge's LLM proxy
+  # on 8767 and speaks. Its models are the host's, in ~/.cache: the speech-to-text,
+  # the voice and the voice detection that `uv run speech-to-speech` downloads too.
+  # About a minute to load; it listens on 127.0.0.1 only, as the bridge is its client.
+  speech:
+    image: stepit-speech-speech
+    build:
+      context: ../engines/speech-to-speech
+      dockerfile: ../../docker/speech.Dockerfile
+    network_mode: host
+    gpus: all
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ${HOME}/.cache/huggingface:/home/voice/.cache/huggingface
+      - ${HOME}/.cache/torch:/home/voice/.cache/torch
+      - ${HOME}/.cache/faster-qwen3-tts:/home/voice/.cache/faster-qwen3-tts
+    # The bridge's LLM proxy, never llama-server directly: otherwise the LLM writes the
+    # read-backs in its own words. No summaries of older turns: they would retell the
+    # read-backs as the model's own actions. The voice in 8 bits saves 1.6 GB of the GPU.
+    command:
+      - serve
+      - --llm_backend
+      - chat-completions
+      - --responses_api_base_url
+      - http://127.0.0.1:8767/v1
+      - --responses_api_api_key
+      - ""
+      - --model_name
+      - bonsai-2-27b
+      - --compact_history
+      - "false"
+      - --qwen3_tts_ggml_quantization
+      - Q8_0
+      # A short "yes" has 200 to 350 ms of voice: the default, 384, threw most of ours away.
+      - --min_speech_ms
+      - "192"
+    depends_on:
+      bridge:
+        condition: service_started

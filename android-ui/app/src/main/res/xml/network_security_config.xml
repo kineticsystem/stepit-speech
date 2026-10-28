@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Giovanni Remigi -->
+<!-- SPDX-License-Identifier: MIT -->
+<!-- The bridge speaks ws://, on the local network, at an address only we know,
+     e.g. 192.168.1.10: a domain list cannot name it, so cleartext is allowed. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
+</network-security-config>

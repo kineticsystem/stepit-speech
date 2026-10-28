@@ -9,6 +9,9 @@ the whole utterance must be made of confirming phrases (and fillers such as
 "please"); "yes, but 20 degrees" is not a yes. Anything that is not clearly
 yes cancels the pending command.
 
+The wake phrase is stricter still: the utterance must end with the phrase,
+word for word, as sentences of its own (``ends_with``).
+
 Stop is the opposite: a stop phrase anywhere in the utterance stops, e.g.
 "ok stop" or "stop the live view" (``mentions_stop``). A stop heard by mistake
 costs nothing; a stop missed is the failure that matters. Only an utterance
@@ -95,6 +98,26 @@ class PhraseMatcher:
         if self._decline and _covers(sequence, self._decline, self._fillers):
             return Meaning.DECLINE
         return Meaning.OTHER
+
+
+# The end of a sentence, in a transcript.
+_SENTENCE_END = re.compile(r"[.?!]+")
+
+
+def ends_with(text: str, phrases: Iterable[str]) -> bool:
+    """Whether the utterance ends with one of the phrases, said as sentences of their own.
+
+    The wake phrase is matched this way: whole sentences, ignoring case and the
+    punctuation inside them, with no fillers, so that "wake up StepIt and rotate
+    the stage" and "please wake up StepIt" do not wake the voice. Sentences
+    before it may say anything: while the voice sleeps, the speech server keeps
+    the turn open, and its transcript grows with everything said since, e.g.
+    "Can you hear me? Wake up. Step it."
+    """
+    wanted = set(_phrases(phrases))
+    sentences = [tuple(words(sentence)) for sentence in _SENTENCE_END.split(text)]
+    sentences = [sentence for sentence in sentences if sentence]
+    return any(sum(sentences[-count:], ()) in wanted for count in range(1, len(sentences) + 1))
 
 
 def same_sentence(heard: str, expected: str) -> bool:

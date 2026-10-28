@@ -6,6 +6,7 @@
 
 - [Introduction](#introduction)
 - [Confirming and Stopping](#confirming-and-stopping)
+- [Sleeping and Waking](#sleeping-and-waking)
 - [The Commands at a Glance](#the-commands-at-a-glance)
 - [The Commands](#the-commands)
   - [rotate_stage](#rotate_stage)
@@ -23,6 +24,7 @@
   - [lights](#lights)
   - [report_status](#report_status)
   - [report_progress](#report_progress)
+  - [sleep](#sleep)
 
 ## Introduction
 
@@ -43,6 +45,15 @@ A command that changes the robot is read back, and runs only once we confirm it:
 > [!WARNING]
 > The voice stop takes about a second, the time to hear the end of the sentence and transcribe it. It does not replace the stop of the gamepad or of the page.
 
+## Sleeping and Waking
+
+The voice can sleep, so that we talk to others without it hearing a command:
+
+- **Sleep** with [`sleep`](#sleep), in our own words, e.g. "go to sleep". It is read back and confirmed like any command, and runs nothing on the robot. The voice says "Going to sleep. To wake me, say: Wake up."
+- **Asleep**, it hears nothing but stop and the wake phrase: nothing reaches the LLM, and the voice stays silent. Stop still stops the robot.
+- **Wake** it with exactly one of: "Wake up", "wakeup", as a sentence of its own, with nothing after it. The voice says "I'm listening."
+- A session starts awake.
+
 ## The Commands at a Glance
 
 | Command | What it does | Confirmed |
@@ -50,7 +61,7 @@ A command that changes the robot is read back, and runs only once we confirm it:
 | [`rotate_stage`](#rotate_stage) | Turns the rotary stage, the turntable the subject stands on, by an angle. | yes |
 | [`move_camera`](#move_camera) | Moves the camera along the rail, closer to the subject or farther from it, by a distance. | yes |
 | [`go_to_mark`](#go_to_mark) | Moves the camera back to the near or the far mark of the focus stack, to check the focus there. | yes |
-| [`manual_drive`](#manual_drive) | Hands the rig to the gamepad and the sliders (on), or takes it back for the commands (off). | yes |
+| [`manual_drive`](#manual_drive) | Enables teleoperation (on), so that the rig is driven by hand, with the gamepad or the sliders, or disables it (off), to take the rig back for the commands. | yes |
 | [`stop`](#stop) | Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop. | no, it runs at once |
 | [`mark`](#mark) | Marks where the camera is now as the near or the far end of the focus stack: the near end is the closest part of the subject in focus, the far end the farthest. | yes |
 | [`set_stack`](#set_stack) | Changes the plan of the focus stack: the shots from the near end to the far one, the angles of the stage, and how far the stage turns either way. Give only what changes. | yes |
@@ -62,6 +73,7 @@ A command that changes the robot is read back, and runs only once we confirm it:
 | [`lights`](#lights) | Switches the lights of the rig on or off. | yes |
 | [`report_status`](#report_status) | Says what the rig is doing now. Changes nothing. | no, it changes nothing |
 | [`report_progress`](#report_progress) | Says how far the running or the last focus stack is. Changes nothing. | no, it changes nothing |
+| [`sleep`](#sleep) | Puts the voice to sleep: until the user says the wake phrase, it hears nothing but stop. It does not stop the robot. | yes |
 
 ## The Commands
 
@@ -245,15 +257,15 @@ Moves the camera back to the near or the far mark of the focus stack, to check t
 
 ### manual_drive
 
-Hands the rig to the gamepad and the sliders (on), or takes it back for the commands (off).
+Enables teleoperation (on), so that the rig is driven by hand, with the gamepad or the sliders, or disables it (off), to take the rig back for the commands.
 
 | Parameter | Values | Description |
 |---|---|---|
 | `state` | `on`, `off` |  |
 
-**"switch on manual drive"** becomes `manual_drive(state: 'on')`.
+**"enable teleoperation"** becomes `manual_drive(state: 'on')`.
 
-- It reads back: "Handing the rig to the gamepad. Confirm?"
+- It reads back: "Enabling teleoperation. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -268,11 +280,30 @@ Hands the rig to the gamepad and the sliders (on), or takes it back for the comm
   }
   ```
 
-- When it is done: "The gamepad drives the rig."
+- When it is done: "Teleoperation enabled."
+
+**"switch on manual drive"** becomes `manual_drive(state: 'on')`.
+
+- It reads back: "Enabling teleoperation. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "ActivateTeleop",
+      "payload": ""
+    }
+  }
+  ```
+
+- When it is done: "Teleoperation enabled."
 
 **"give me the gamepad"** becomes `manual_drive(state: 'on')`.
 
-- It reads back: "Handing the rig to the gamepad. Confirm?"
+- It reads back: "Enabling teleoperation. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -287,11 +318,11 @@ Hands the rig to the gamepad and the sliders (on), or takes it back for the comm
   }
   ```
 
-- When it is done: "The gamepad drives the rig."
+- When it is done: "Teleoperation enabled."
 
-**"turn manual drive off"** becomes `manual_drive(state: 'off')`.
+**"turn teleoperation off"** becomes `manual_drive(state: 'off')`.
 
-- It reads back: "Taking the rig back from the gamepad. Confirm?"
+- It reads back: "Disabling teleoperation. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -306,7 +337,7 @@ Hands the rig to the gamepad and the sliders (on), or takes it back for the comm
   }
   ```
 
-- When it is done: "The gamepad is off."
+- When it is done: "Teleoperation disabled."
 
 ### stop
 
@@ -839,3 +870,22 @@ It first reads the robot: `progress` with `read_latched_topic`.
 **"how far is the stack"** becomes `report_progress()`.
 
 - It answers: "120 of 350 pictures are taken."
+
+### sleep
+
+Puts the voice to sleep: until the user says the wake phrase, it hears nothing but stop. It does not stop the robot.
+
+**"go to sleep"** becomes `sleep()`.
+
+- It reads back: "Putting the voice to sleep. Confirm?"
+- It runs nothing on the robot. The voice says: "Going to sleep. To wake me, say: Wake up."
+
+**"goodnight StepIt"** becomes `sleep()`.
+
+- It reads back: "Putting the voice to sleep. Confirm?"
+- It runs nothing on the robot. The voice says: "Going to sleep. To wake me, say: Wake up."
+
+**"take a break"** becomes `sleep()`.
+
+- It reads back: "Putting the voice to sleep. Confirm?"
+- It runs nothing on the robot. The voice says: "Going to sleep. To wake me, say: Wake up."

@@ -12,6 +12,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [004-summary-off.md](004-summary-off.md) | [#4](https://github.com/kineticsystem/stepit-speech/pull/4) No summaries of older turns: the proxy writes them, without the model |
 | [005-todo-hands-free.md](005-todo-hands-free.md) | [#5](https://github.com/kineticsystem/stepit-speech/pull/5) TODO: hands-free control from a phone in a pocket |
 | [006-mdns-hosts.md](006-mdns-hosts.md) | [#6](https://github.com/kineticsystem/stepit-speech/pull/6) Resolve .local names on the host for the bridge's container |
+| [007-hands-free.md](007-hands-free.md) | [#7](https://github.com/kineticsystem/stepit-speech/pull/7) Hands-free: the Android app, sleep mode and the whole voice in serve |
 
 ## How to Write One
 

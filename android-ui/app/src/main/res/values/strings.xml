@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Giovanni Remigi -->
+<!-- SPDX-License-Identifier: MIT -->
+<resources>
+    <string name="app_name">StepIt Speech</string>
+    <string name="channel_name">Voice</string>
+    <string name="notification_title">StepIt Speech is listening</string>
+    <string name="stop">Stop</string>
+    <!-- The phrases of the plan, until a bridge gives its own in voicebridge.state. -->
+    <string name="default_wake">Wake up</string>
+    <string name="default_sleep">Go to sleep</string>
+</resources>

@@ -27,6 +27,9 @@ class Guard:
     verbs: frozenset[str] = frozenset()
     # Yes, no and stop, which the bridge answers itself.
     matcher: PhraseMatcher | None = field(default=None, compare=False)
+    # The words of the bridge's sentences on falling asleep and on waking up; empty without a sleep mode.
+    falls_asleep: tuple[str, ...] = ()
+    wakes_up: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, catalogue: Catalogue) -> Guard:
@@ -36,12 +39,20 @@ class Guard:
                  if word.endswith("ing") and len(word) > 4}
         verbs |= {word for text in texts for word in re.findall(r"'([^']*)'", text) for word in words(word)
                   if word.endswith("ing") and len(word) > 4}
+        sleep = catalogue.sleep
+        if sleep is not None:
+            # "Goodnight, I'm going to sleep.": the voice only sleeps when the bridge puts it to sleep.
+            verbs |= _SLEEPING
         return cls(catalogue.confirmation.prompt, frozenset(verbs | _ACTING),
-                   PhraseMatcher(catalogue.confirmation))
+                   PhraseMatcher(catalogue.confirmation),
+                   tuple(words(sleep.asleep)) if sleep else (), tuple(words(sleep.awake)) if sleep else ())
 
 
 # Words of any robot's action, besides the verbs of its own read-backs.
 _ACTING = frozenset({"turning", "done"})
+
+# Words of a reply that pretends to fall asleep, for a robot with a sleep mode.
+_SLEEPING = frozenset({"sleep", "sleeping", "asleep", "goodnight", "night"})
 
 
 # The code of a template, {{ ... }} or {% ... %}: its words are not spoken, except quoted ones.

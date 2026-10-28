@@ -6,13 +6,17 @@
 #
 #   ./docker/dock.sh build                 the image of the bridge and the tests
 #   ./docker/dock.sh build-llm             the image of llama-server, with CUDA (about 10 minutes on 12 cores)
+#   ./docker/dock.sh build-speech          the image of the speech server, with CUDA and PyTorch
 #   ./docker/dock.sh test                  bin/test.sh, as CI runs it
 #   ./docker/dock.sh models                downloads the model into models/
-#   ./docker/dock.sh serve [robot file]    the LLM on the GPU, then the bridge, on the host's network
+#   ./docker/dock.sh serve [robot file]    the LLM, the bridge and the speech server, on the host's network
 #   ./docker/dock.sh bridge [robot file]   the bridge alone, with an LLM of our own at VOICEBRIDGE_LLM_URL
 #   ./docker/dock.sh shell                 a terminal in the container
+#   ./docker/dock.sh build-android         the image that builds the Android app
+#   ./docker/dock.sh android [tasks]       Gradle in it, by default the unit tests and the debug APK
 
 IMAGE=stepit-speech
+ANDROID_IMAGE=stepit-speech-android
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROBOT=${2:-robots/stepit-macro/robot.yaml}
 
@@ -20,9 +24,19 @@ ROBOT=${2:-robots/stepit-macro/robot.yaml}
 RUN=(docker run --rm --user "$(id -u):$(id -g)" -v "$ROOT:/app" -w /app)
 COMPOSE=(docker compose -f "$ROOT/docker/compose.yaml")
 
-# llama.cpp is a submodule: a clone without --recursive does not have it yet.
+# llama.cpp and speech-to-speech are submodules: a clone without --recursive does not have them yet.
 llama_cpp() {
     [ -e "$ROOT/engines/llama.cpp/CMakeLists.txt" ] || git -C "$ROOT" submodule update --init engines/llama.cpp
+}
+speech_to_speech() {
+    [ -e "$ROOT/engines/speech-to-speech/pyproject.toml" ] \
+        || git -C "$ROOT" submodule update --init engines/speech-to-speech
+}
+
+# The speech server's models live in the host's ~/.cache, shared with `uv run speech-to-speech`.
+# Made here, as the user: a folder docker makes for a volume is root's.
+speech_caches() {
+    mkdir -p ~/.cache/huggingface ~/.cache/torch ~/.cache/faster-qwen3-tts
 }
 
 # The containers cannot resolve mDNS names, e.g. stepit.local: the host resolves each
@@ -65,6 +79,10 @@ case "$1" in
         llama_cpp
         "${COMPOSE[@]}" build llm
         ;;
+    build-speech)
+        speech_to_speech
+        "${COMPOSE[@]}" build speech
+        ;;
     test)
         "${RUN[@]}" "$IMAGE" bin/test.sh
         ;;
@@ -73,6 +91,8 @@ case "$1" in
         ;;
     serve)
         llama_cpp
+        speech_to_speech
+        speech_caches
         "$ROOT/bin/download-model.sh"
         export ROBOT HOST_UID HOST_GID
         HOST_UID=$(id -u) HOST_GID=$(id -g)
@@ -80,7 +100,7 @@ case "$1" in
         HOSTS_FILE=$(mktemp --suffix .yaml)
         mdns_compose > "$HOSTS_FILE"
         COMPOSE+=(-f "$HOSTS_FILE")
-        # Ctrl-C, or the end of either, stops both.
+        # Ctrl-C, or the end of any of them, stops all three.
         trap '"${COMPOSE[@]}" down; rm -f "$HOSTS_FILE"' EXIT
         "${COMPOSE[@]}" up --abort-on-container-exit
         ;;
@@ -97,8 +117,22 @@ case "$1" in
         mdns_hosts
         "${RUN[@]}" -it --network host "${ADD_HOSTS[@]}" "$IMAGE" bash
         ;;
+    build-android)
+        docker build -f "$ROOT/docker/android.Dockerfile" -t "$ANDROID_IMAGE" "$ROOT/docker"
+        ;;
+    android)
+        # Gradle's and Android's homes in the repo, under android-ui/.cache, so that the
+        # downloads and the debug key survive the container: the same key lets a new APK
+        # replace the old one on the phone.
+        shift
+        [ $# -gt 0 ] || set -- test assembleDebug
+        "${RUN[@]}" -w /app/android-ui \
+            -e GRADLE_USER_HOME=/app/android-ui/.cache/gradle -e ANDROID_USER_HOME=/app/android-ui/.cache/android \
+            "$ANDROID_IMAGE" ./gradlew --no-daemon "$@"
+        ;;
     *)
-        echo "Usage: $0 build | build-llm | test | models | serve [robot file] | bridge [robot file] | shell"
+        echo "Usage: $0 build | build-llm | build-speech | test | models | serve [robot file] | bridge [robot file]" \
+            "| shell | build-android | android [tasks]"
         exit 1
         ;;
 esac

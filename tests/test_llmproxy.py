@@ -14,16 +14,18 @@ from aiohttp import web
 from voicebridge.llmproxy.chat import (
     SUMMARY,
     asks_for_summary,
+    asleep,
     chunks,
     completion,
     scripted,
     summary,
+    without_sleep,
     without_summary,
 )
 from voicebridge.llmproxy.decision import REPLY, commands_only, settle, structured
 from voicebridge.llmproxy.guard import Guard, asks_to_confirm, pretends
 from voicebridge.llmproxy.proxy import SAY_AGAIN, LlmProxy
-from voicebridge.safety.phrases import PhraseMatcher
+from voicebridge.safety.phrases import PhraseMatcher, words
 from voicebridge.scripted import exact_speech
 
 MOVE = {"type": "function", "function": {"name": "move_camera", "description": "Moves the camera.",
@@ -267,7 +269,7 @@ async def test_an_imitated_read_back_is_never_said(proxied):
 
 def test_the_verbs_of_the_robot_come_from_its_sentences(stepit_macro):
     guard = Guard.of(stepit_macro)
-    assert {"moving", "rotating", "taking", "switching", "handing", "turning"} <= guard.verbs
+    assert {"moving", "rotating", "taking", "switching", "enabling", "disabling", "turning"} <= guard.verbs
     assert pretends("I can do that. Moving the camera closer by 10 millimetres.", guard)
     assert pretends("Taking a test shot now.", guard)
     assert not pretends("How many millimetres closer?", guard)
@@ -329,3 +331,76 @@ async def test_every_request_goes_to_the_chosen_model(arm):
     finally:
         await proxy.stop()
         await llm.runner.cleanup()
+
+
+# ── The sleep mode ─────────────────────────────────────────────────────────────
+
+ASLEEP = "Going to sleep. To wake me, say: Wake up, robot."
+AWAKE = "I'm listening."
+
+
+def said(text: str) -> dict[str, Any]:
+    return {"role": "assistant", "content": text}
+
+
+def heard(text: str) -> dict[str, Any]:
+    return {"role": "user", "content": text}
+
+
+def test_the_state_is_the_later_of_the_two_sentences():
+    falls, wakes = tuple(words(ASLEEP)), tuple(words(AWAKE))
+    assert not asleep({"messages": [system("Hi."), heard("go to sleep")]}, falls, wakes)
+    assert asleep({"messages": [heard("yes"), said(ASLEEP), heard("turn left")]}, falls, wakes)
+    assert not asleep({"messages": [said(ASLEEP), heard("wake up robot"), said(AWAKE), heard("hi")]}, falls, wakes)
+    assert asleep({"messages": [said(ASLEEP), said(AWAKE), said(ASLEEP)]}, falls, wakes)
+
+
+def test_the_sleeping_turns_are_dropped_from_the_history():
+    falls, wakes = tuple(words(ASLEEP)), tuple(words(AWAKE))
+    history = [system("Hi."), heard("go to sleep"), said(ASLEEP), heard("turn left 10 degrees"), said(""),
+               heard("wake up robot"), said(AWAKE), heard("how far can it go?")]
+    kept = without_sleep({"messages": history}, falls, wakes)["messages"]
+    assert [m["content"] for m in kept] == ["You are in a spoken conversation.\n\nSession Prompt:\nHi.\n\nRules.",
+                                            "go to sleep", ASLEEP, AWAKE, "how far can it go?"]
+
+
+@pytest.fixture
+async def sleepy_proxied(sleepy_arm):
+    llm = FakeLlm()
+    url = await llm.start()
+    proxy = LlmProxy(url, "127.0.0.1", 0, Guard.of(sleepy_arm))
+    await proxy.start()
+    async with aiohttp.ClientSession() as client:
+        yield llm, client, f"http://127.0.0.1:{proxy.port}/v1"
+    await proxy.stop()
+    await llm.runner.cleanup()
+
+
+async def test_asleep_a_turn_never_reaches_the_model(sleepy_proxied):
+    llm, client, url = sleepy_proxied
+    history = [system("Hi."), heard("go to sleep"), said(ASLEEP), heard("turn left 10 degrees")]
+    events = await stream(client, url, {"model": "m", "tools": [MOVE], "messages": history})
+    assert streamed_text(events) == ""
+    assert llm.requests == []
+
+
+async def test_awake_again_the_model_never_sees_the_sleeping_turns(sleepy_proxied):
+    llm, client, url = sleepy_proxied
+    # The bridge's two sentences go through the proxy, which keeps them from the model too.
+    for sentence in (ASLEEP, AWAKE):
+        await stream(client, url, {"model": "m", "tools": [MOVE], "messages": [system(exact_speech(sentence))]})
+    llm.message = decision(reply="Up to 50 millimetres.")
+    history = [system("Hi."), heard("go to sleep"), said(ASLEEP), heard("move it 80 mm, they said"),
+               heard("wake up robot"), said(AWAKE), heard("how far can it go?")]
+    events = await stream(client, url, {"model": "m", "tools": [MOVE], "messages": history})
+    assert streamed_text(events) == "Up to 50 millimetres."
+    contents = [m.get("content") for m in llm.requests[0]["messages"][1:]]
+    # Nor the wake phrase, which is the bridge's to answer.
+    assert contents == ["go to sleep", "how far can it go?"]
+
+
+def test_a_reply_that_pretends_to_sleep_is_caught_only_with_a_sleep_mode(arm, sleepy_arm):
+    # Measured on Bonsai with the speech server's voice rules: about one "go to sleep" in three got these.
+    for reply in ("Goodnight.", "Good night, I'm going to sleep.", "Sleeping, wake me when you need it."):
+        assert pretends(reply, Guard.of(sleepy_arm)), reply
+        assert not pretends(reply, Guard.of(arm)), reply

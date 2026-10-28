@@ -167,3 +167,12 @@ def response_create(tag: str, instructions: str | None = None, tool_choice: str 
 
 def response_cancel() -> dict[str, Any]:
     return {"type": "response.cancel"}
+
+
+# The bridge's own event for its client: whether the voice sleeps, and the phrases to show.
+STATE = "voicebridge.state"
+
+
+def state(asleep: bool, wake: str, sleep: str) -> dict[str, Any]:
+    """The voice's sleep mode, for the phone to show; the browser demo ignores an event it does not know."""
+    return {"type": STATE, "state": "asleep" if asleep else "awake", "wake": wake, "sleep": sleep}
