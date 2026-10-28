@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from voicebridge.robotfile.model import Catalogue
+from voicebridge.robotfile.model import SLEEP_COMMAND, Catalogue
 
 # What a tool call of a command that needs confirmation returns to the LLM.
 AWAITING_CONFIRMATION = (
@@ -31,8 +31,16 @@ short question for it instead. "A bit", "a little" or "some" is not a value: ask
 - Your replies are spoken aloud: one or two short sentences, no lists, no markdown, numbers in digits."""
 
 
+# Added when the robot has a sleep mode: without it, the model often answers "Goodnight." and calls nothing.
+_SLEEP_RULE = """\
+- When the user wants you to sleep, rest or stop listening, e.g. "{example}" or "goodnight", call the tool \
+{command}: never answer "goodnight" or say that you are going to sleep without calling it."""
+
+
 def instructions(catalogue: Catalogue) -> str:
     text = _RULES.format(name=catalogue.name, description=catalogue.description).strip()
+    if catalogue.sleep is not None:
+        text += "\n" + _SLEEP_RULE.format(example=catalogue.sleep.example, command=SLEEP_COMMAND)
     if catalogue.instructions:
         text += "\n\n" + catalogue.instructions
     return text

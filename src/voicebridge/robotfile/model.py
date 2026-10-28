@@ -226,6 +226,28 @@ class ConfirmationSettings:
     stop_command: str | None = None
 
 
+# The name of the command that puts the voice to sleep, built from the robot file's `sleep` section.
+SLEEP_COMMAND = "sleep"
+
+
+@dataclass(frozen=True)
+class SleepSettings:
+    """The voice's sleep mode: asleep, it hears nothing but the wake phrase and stop.
+
+    Going to sleep is a command, ``SLEEP_COMMAND``, read back and confirmed like
+    any other, that runs nothing on the robot. Waking up is one of the ``wake``
+    phrases, said alone: the bridge hears it, never the LLM, which hears nothing
+    while the voice sleeps.
+    """
+
+    wake: tuple[str, ...]
+    # Said when the voice falls asleep, and when it wakes up.
+    asleep: str
+    awake: str
+    # How to put it to sleep, e.g. "go to sleep", for the phone to show.
+    example: str
+
+
 @dataclass(frozen=True)
 class Catalogue:
     """Everything the bridge knows of a robot, loaded from its robot file."""
@@ -239,6 +261,8 @@ class Catalogue:
     commands: Mapping[str, Command]
     # Said when a session starts, in place of the LLM's own greeting; empty: the LLM greets.
     greeting: str = ""
+    # The voice's sleep mode; None: it is always awake.
+    sleep: SleepSettings | None = None
 
     def tool_specs(self) -> list[dict[str, Any]]:
         return [command.tool_spec() for command in self.commands.values()]

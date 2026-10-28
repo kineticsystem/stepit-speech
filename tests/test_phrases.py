@@ -3,7 +3,7 @@
 
 import pytest
 
-from voicebridge.safety.phrases import Meaning, PhraseMatcher, same_sentence, words
+from voicebridge.safety.phrases import Meaning, PhraseMatcher, ends_with, same_sentence, words
 
 
 @pytest.fixture
@@ -61,3 +61,16 @@ def test_same_sentence_ignores_case_and_punctuation():
     assert not same_sentence("Rotating the stage 10 degrees clockwise. Say yes to confirm.",
                              "Rotating the stage 10 degrees counter-clockwise. Say yes to confirm.")
     assert not same_sentence("Rotating the stage 100 degrees.", "Rotating the stage 10 degrees.")
+
+
+@pytest.mark.parametrize("said", ["Wake up, robot.", "wake up robot", "WAKE UP ROBOT!", "wake up robots",
+                                  # The speech server's turn grows while the voice sleeps.
+                                  "Can you hear me? Hello? Wake up, robot.", "Hello. Wake up. Robot."])
+def test_the_wake_phrase_at_the_end_wakes(said):
+    assert ends_with(said, ["Wake up, robot", "wake up robots"])
+
+
+@pytest.mark.parametrize("said", ["wake up robot please", "please wake up robot", "wake up robot and turn left",
+                                  "Wake up, robot. Turn left.", "wake up", "robot", "Hello. Wake up.", ""])
+def test_the_wake_phrase_with_anything_else_does_not(said):
+    assert not ends_with(said, ["Wake up, robot", "wake up robots"])

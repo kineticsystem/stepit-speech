@@ -8,22 +8,12 @@ Three steps, in this order. Decide the open questions first.
 
 ### 1. Sleep Mode in the Bridge
 
-The bridge, not the phone, decides whether it is awake, from fixed words, as it decides yes and stop. The phone only carries the audio and shows the state, so a bug of the phone cannot wake the robot.
+Done: the robot file's `sleep` section, described in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#sleeping-and-waking). Going to sleep is a command, read back and confirmed, that runs nothing on the robot; waking up is a wake phrase said alone; a session starts awake; stop always works; the phone is told the state with `voicebridge.state`.
 
-- **Two states.** Asleep: everything we say is ignored; nothing reaches the LLM, no command is proposed, the voice stays silent. Awake: as today.
-- **The phrases in the robot file**, e.g. `wake: [wake up stepit, wake up step it]` and `sleep: [go to sleep stepit, go to sleep step it]`, matched as yes, no and stop are. Speech-to-text will probably write "StepIt" as "step it" or "stepped": try the variants with the voice.
-- **The voice answers** the change, e.g. "I'm listening." and "Going to sleep.", as sentences of the bridge.
-- **Silent while asleep.** The session mutes and cancels the speech server's reply to every turn, as it does for a yes.
-- **The LLM never sees the sleeping turns.** The proxy finds the state on its own, from the last wake or sleep phrase in the transcripts of each request, so it shares no state with the session, and drops the sleeping turns from the history.
-- **Stop always works**, asleep or awake: a stop missed is the failure that matters.
-- **A state event for the phone**, e.g. `voicebridge.state` with `asleep` or `awake`, which the browser demo ignores.
-- A safety rule and its test in `tests/test_session.py`, and the proxy's tests in `tests/test_llmproxy.py`.
+Still open:
 
-Open questions:
-
-- The phrases: "Wake up StepIt" and "Go to sleep StepIt"?
-- Asleep or awake when a phone connects? Asleep is the safer start: nothing happens until we wake it.
 - Fall asleep after a quiet spell, e.g. 5 minutes, or only when told?
+- An outcome that comes while asleep, e.g. the end of a focus stack, is said at once: or kept for the wake?
 
 The speech server still transcribes everything while asleep, on our own GPU: nothing leaves the computer, but the microphone is live. A wake word recognised on the phone, before any audio leaves it, would avoid that, at the price of a wake-word model of our own: openWakeWord needs one trained for the phrase, and Porcupine's free tier excludes commercial use.
 
@@ -54,19 +44,17 @@ What the app does is the same in every form: capture the microphone at 24 kHz, 1
 
 The speech server's demo, `demo/` of speech-to-speech (Apache 2.0), has working audio worklets for capture and playback to learn from. Whichever form, the app lives in this repository, builds in Docker like the rest (e.g. `./docker/dock.sh build-android`), and is tested against a fake bridge without a phone.
 
-My leaning: the native app for a phone in a pocket, as the audio is the heart of it. Capacitor if we want to stay in React and TypeScript, or want an iPhone later. The web page only if step 2 shows that Chrome keeps listening.
+Chosen: the native app, as the audio is the heart of it. Its first version is in [`android-ui`](android-ui/README.md): it streams the microphone, plays the voice, keeps going with the screen locked, reconnects and logs the drops, and shows the sleep mode. Capacitor stays the way to an iPhone, if we want one.
 
 Open questions:
 
-- Which phone, and which headset: wired, USB-C or Bluetooth?
-- Web page, Capacitor or native?
+- Which headset: wired, USB-C or Bluetooth? The phone is a Moto G9, Android 11.
 - An iPhone one day?
 
 ## Later
 
 - **Download Bonsai from its release repository.** We download `Ternary-Bonsai-2-27B-Q2_0-prism-fork-required.gguf` from `prism-ml/Ternary-Bonsai-2-27B-gguf-dev`, Prism ML's development repository. Its release repository, `prism-ml/Ternary-Bonsai-2-27B-gguf`, has `Ternary-Bonsai-2-27B-PQ2_0.gguf`, 7.2 GB, under the same Apache 2.0 licence. For a product, switch to it once `llama-server` of the submodule loads it and `voicebridge eval` still scores 35 of 35 on the GPU computer.
 - **Credit the models in a product.** Bonsai and Qwen3.8-27B are Apache 2.0: ship their `LICENSE` and `NOTICE.txt` with the model file, and Prism ML asks for "Created using Bonsai by Prism ML.". The speech server's default speech-to-text, NVIDIA's Parakeet TDT 0.6B v3, is CC BY 4.0, which requires credit.
-- **Start the speech server from this project too**, so that one command starts the whole voice: the speech server, llama-server and the bridge, as `docker/compose.yaml` already starts the last two.
 - **Check the LLM on the GPU computer** after each new release of the submodule: `voicebridge eval` must still score 35 of 35.
 - **Remove the dependency on StepIt Macro**: its robot file moves into the stepit-macro repository, and this project becomes a module of the rig.
 - **Check whether [Pydantic AI](https://pydantic.dev/docs/ai/) helps.** It could replace the call of the proxy to the LLM, not the safety gate. First findings, from its documentation (version 2.60):

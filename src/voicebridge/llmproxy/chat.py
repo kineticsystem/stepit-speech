@@ -101,6 +101,39 @@ def without(body: dict[str, Any], sentences: Collection[tuple[str, ...]]) -> dic
     return {**body, "messages": [m for m in body.get("messages") or [] if not spoken(m)]}
 
 
+def _said(message: Any) -> tuple[str, ...] | None:
+    """The words of an assistant's spoken message; None for any other message."""
+    if not isinstance(message, Mapping) or message.get("role") != "assistant" or message.get("tool_calls"):
+        return None
+    return tuple(words(_text(message.get("content"))))
+
+
+def asleep(body: Mapping[str, Any], falls_asleep: tuple[str, ...], wakes_up: tuple[str, ...]) -> bool:
+    """Whether the voice sleeps, from the last of its two sentences in the history: the bridge's
+    sentence on falling asleep, or on waking up. Without either, it is awake."""
+    for message in reversed(body.get("messages") or []):
+        said = _said(message)
+        if said is not None and said in (falls_asleep, wakes_up):
+            return said == falls_asleep
+    return False
+
+
+def without_sleep(body: dict[str, Any], falls_asleep: tuple[str, ...], wakes_up: tuple[str, ...]) -> dict[str, Any]:
+    """The request without the turns said while the voice slept, between its two sentences."""
+    kept: list[Any] = []
+    sleeping = False
+    for message in body.get("messages") or []:
+        said = _said(message)
+        if said == falls_asleep:
+            sleeping = True
+        elif said == wakes_up:
+            sleeping = False
+        elif sleeping:
+            continue
+        kept.append(message)
+    return {**body, "messages": kept}
+
+
 def without_summary(body: dict[str, Any]) -> dict[str, Any]:
     """The request without the user's and the assistant's messages of ``SUMMARY``."""
     summary_words = words(SUMMARY)

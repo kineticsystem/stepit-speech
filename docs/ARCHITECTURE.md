@@ -9,10 +9,12 @@
   - [The Confirmation, as a State Machine](#the-confirmation-as-a-state-machine)
   - [What Can Go Wrong, and What Catches It](#what-can-go-wrong-and-what-catches-it)
   - [Stop](#stop)
+  - [Sleeping and Waking](#sleeping-and-waking)
 - [The Robot File](#the-robot-file)
   - [Commands and Calls](#commands-and-calls)
   - [Every Key of a Command](#every-key-of-a-command)
   - [Templates](#templates)
+  - [The Sleep Section](#the-sleep-section)
   - [What the Loader Checks](#what-the-loader-checks)
 - [The Parts and Their Modules](#the-parts-and-their-modules)
 - [The Objects at Run Time](#the-objects-at-run-time)
@@ -40,7 +42,7 @@ An example from everyday life, outside software, shows the idea: a waiter in a r
 
 ## The Big Picture
 
-Five programs take part. Two run from this project: the bridge, and the LLM server, `llama-server` of llama.cpp, built from a submodule and started with the bridge. The others are used as they are.
+Five programs take part. Three run from this project, started together by `./docker/dock.sh serve`: the bridge; the LLM server, `llama-server` of llama.cpp; and the speech server, Speech-to-Speech; both built from submodules. The browser demo, or the Android app of [`android-ui`](../android-ui/README.md), and the robot's rosbridge are used as they are.
 
 <!-- The source is diagrams/big-picture.mmd: change it, then run bin/render-diagrams.sh. -->
 <p align="center"><img src="diagrams/big-picture.svg" alt="The browser demo talks to voicebridge; voicebridge talks to the Speech-to-Speech server, whose LLM proxy asks the LLM for one JSON decision, and sends confirmed commands through rosbridge to StepIt Commander and the drivers of StepIt Macro." width="871"></p>
@@ -104,6 +106,7 @@ The bridge exists for these rules. Each one is code, not a request to the LLM, a
 11. **What is not in the robot file cannot be said.** StepIt Macro's file leaves out switching the rig off, and the objectives that take raw radians.
 12. **The LLM cannot pretend.** Every turn it answers with a command or a reply, in a JSON schema its server enforces, so a command cannot hide in words. A reply that asks to confirm, or says the robot is acting, is asked again with commands only. See [The LLM Proxy](#the-llm-proxy).
 13. **Yes, no and stop never reach the LLM.** A yes with no command waiting is answered by the bridge: "There is no command waiting for confirmation, so nothing was done."
+14. **Asleep, the voice hears nothing but stop and the wake phrase.** Every other turn is muted and cancelled, and never reaches the LLM; only a wake phrase, as the last sentence we said, wakes it. See [Sleeping and Waking](#sleeping-and-waking).
 
 ### The Confirmation, as a State Machine
 
@@ -128,6 +131,7 @@ Every way out of `Armed` goes back to `Idle`, so a command is confirmed once at 
 | The LLM decides that "sure, why not" or "yes but slower" is a yes. | It is not asked: the bridge matches the words itself, and neither sentence is made only of confirming words. |
 | We say yes before the read-back is over. | Rule 6: the command is dropped. |
 | We say yes a minute later, to something else. | The 20 seconds have passed: nothing runs, and the voice says so. |
+| A noise becomes an empty transcript while a command waits for its yes. | The session ignores it: a transcript with no words cancels nothing. |
 | The LLM speaks its own answer to our yes, e.g. "Done!" before anything ran. | The proxy answers a yes, a no or a stop with nothing, and the bridge mutes and cancels the server's reply to every turn it answers itself. |
 | The browser tab closes during a move. | The session cancels its goals. |
 | rosbridge is down. | The request fails at once, and the voice says "cannot reach rosbridge". |
@@ -145,6 +149,17 @@ The robot file lists the stop words, e.g. `stop`, `halt`, `abort`, `freeze`, and
 <p align="center"><img src="diagrams/stop.svg" alt="The user says stop while a rotation runs; voicebridge cancels the reply and the goal without the LLM, and the voice says Stopped." width="782"></p>
 
 On the rig, with its fake motors, the commander logged the cancel 1.5 seconds after the move started, and halted the tree.
+
+### Sleeping and Waking
+
+When the robot file has a [`sleep` section](#the-sleep-section), the voice can sleep, so that we can talk to others, or think aloud, without it hearing a command. A session starts awake.
+
+- **Going to sleep is a command**, `sleep`, which we say in our own words, e.g. "goodnight StepIt". The LLM proposes it, and the bridge reads it back and waits for the yes, as for any command: a sleep heard by mistake is undone only by the wake phrase, so it is worth a confirmation. Once confirmed, it runs nothing on the robot: the session falls asleep, and the voice says "Going to sleep. To wake me, say: Wake up." A command that runs, e.g. a focus stack, goes on.
+- **Asleep**, the session mutes and cancels the server's reply to every turn, as it does for a yes, and the proxy answers every request with nothing. Stop still stops: it is checked first, asleep or awake.
+- **Waking up is one exact phrase**, matched by the bridge with `ends_with`: the turn must end with one of the `wake` phrases, as sentences of their own, ignoring case and the punctuation inside them, with no fillers. "Wake up and rotate the stage" and "please wake up" do not wake it. Sentences before it may say anything, because while the voice sleeps the speech server keeps the turn open after each cancelled reply, and its transcript grows with everything said since: "Can you hear me? Hello? Wake up." wakes it. The LLM cannot wake it: it hears nothing while the voice sleeps. Waking needs no confirmation, as it moves nothing. The voice says "I'm listening."
+- **The client is told the state.** The session sends its own event, `{"type": "voicebridge.state", "state": "awake", "wake": "Wake up", "sleep": "go to sleep"}`, after the client's first `session.update` and at every change, for the phone to show. The browser demo ignores an event it does not know.
+
+The session and the proxy share no state. The proxy finds the state in each request's history, from the later of the bridge's two sentences, on falling asleep and on waking up, and drops the turns between them: see [What the Model Never Sees](#what-the-model-never-sees). A sentence of the bridge the speech server did not keep, e.g. one we spoke over, would leave the proxy asking the model during a sleep; the session still mutes the reply, and the call inside it is answered without running.
 
 ## The Robot File
 
@@ -197,9 +212,27 @@ The filters the robot files need:
 
 A number printed into a text reads as a person says it: 10.0 is "10". The environment is sandboxed and immutable: a template cannot reach Python's internals or change its values. A name that does not exist is an error, never an empty value.
 
+### The Sleep Section
+
+An optional section, `sleep`, gives the voice its sleep mode; without it, the voice is always awake. The loader builds the command `sleep` from it, with nothing to run, and adds it to the commands: a robot command may not take that name.
+
+```yaml
+sleep:
+  wake: [Wake up, wakeup]
+  examples: [go to sleep, goodnight StepIt, take a break]
+```
+
+| Key | Needed | What it is |
+|---|---|---|
+| `wake` | yes | The phrases that wake the voice, each as the last sentence we say. Speech-to-text writes a phrase in several ways, e.g. "wakeup": list the ones we hear. The first is the one the phone shows. |
+| `examples` | yes | What we say to put the voice to sleep: they teach the LLM, as the examples of a command. The first is the one the phone shows. |
+| `say` | no | The read-back, "Putting the voice to sleep." by default, before the robot's confirmation question. |
+| `asleep`, `awake` | no | What the voice says on falling asleep and on waking up: "Going to sleep. To wake me, say: <the first wake phrase>." and "I'm listening." by default. |
+| `description` | no | What the LLM reads to choose the command. |
+
 ### What the Loader Checks
 
-`load` checks the whole file before the bridge starts, and says where a mistake is: a key it does not know, e.g. `sya` for `say`; a call that does not exist; a template that does not compile; a name a template reads that is not a parameter, `reads` or a `let`, with the names it knows; an example whose arguments do not fit its parameters; a query that does not say `confirm: false`; stop words without a stop command. Two traps of YAML are handled for us: `yes`, `no`, `on` and `off` stay words, not booleans, and a key with a space, which a comma inside `{ }` creates, comes with a hint to use quotes.
+`load` checks the whole file before the bridge starts, and says where a mistake is: a key it does not know, e.g. `sya` for `say`; a call that does not exist; a template that does not compile; a name a template reads that is not a parameter, `reads` or a `let`, with the names it knows; an example whose arguments do not fit its parameters; a query that does not say `confirm: false`; stop words without a stop command; a sleep section without a wake phrase or an example, or with a phrase that holds a stop word, as "stop listening" would stop the robot. Two traps of YAML are handled for us: `yes`, `no`, `on` and `off` stay words, not booleans, and a key with a space, which a comma inside `{ }` creates, comes with a hint to use quotes.
 
 ## The Parts and Their Modules
 
@@ -304,6 +337,8 @@ The speech server sends every reply through its LLM: there is no event that make
 5. **A turn of yes, no or stop**, by the same word lists as the session: answered with nothing, as the bridge answers it.
 6. **Any other turn**: the model is asked for one decision, below.
 
+Before all but the first two, the proxy asks whether the voice sleeps, from the history: asleep, every request is answered with nothing, and the model is not asked. See [Sleeping and Waking](#sleeping-and-waking).
+
 `proxy` holds this order; `chat` reads the request, `decision` writes the request for one decision, described next, and `guard` judges the reply. The proxy also replaces the model a request names with the one given to `voicebridge serve --llm-model`, for every request, the passed-through ones included: a server of several models would otherwise answer a request that names another one, e.g. a summary the speech server asks for on its own, with another model. `llama-server` serves one, and needs none of this.
 
 ### One Decision per Turn
@@ -324,7 +359,7 @@ A reply can still pretend. The proxy refuses a reply that asks to confirm, or th
 
 ### What the Model Never Sees
 
-A model that has heard the bridge read commands back starts doing it itself: after a few turns it answers "Switching the lights on. Confirm?" without calling the command. So the proxy removes from the history every sentence it said in the model's place, the read-backs, outcomes and greeting, before it asks the model. The model sees our requests and its own calls, never the bridge's words. And it never sees the turn of a yes, a no or a stop, which the proxy answers with nothing.
+A model that has heard the bridge read commands back starts doing it itself: after a few turns it answers "Switching the lights on. Confirm?" without calling the command. So the proxy removes from the history every sentence it said in the model's place, the read-backs, outcomes and greeting, before it asks the model. The model sees our requests and its own calls, never the bridge's words. And it never sees the turn of a yes, a no or a stop, which the proxy answers with nothing, nor the turns we said while the voice slept: the proxy drops everything between the bridge's sentence on falling asleep and its sentence on waking up, the wake phrase included, before it removes the bridge's sentences themselves.
 
 Nor does it see a summary of the bridge's words. Once the history grows past its `chat_size`, the speech server can ask its LLM to summarise the older turns, and puts the summary at the head of the history. Written by the model, it retells the read-backs and outcomes in its own words, "The assistant rotated the stage", which the proxy cannot recognise to remove, and the model sees itself acting again. So the proxy writes the summary itself, "Earlier turns are left out.", for the user and the assistant alike, and removes both from every request before it asks the model. The README starts the speech server with `--compact_history false`, so that it drops the oldest turns instead, and asks for no summary at all.
 
@@ -332,7 +367,7 @@ Nor does it see a summary of the bridge's words. Once the history grows past its
 
 The LLM is part of the project. [llama.cpp](https://github.com/ggml-org/llama.cpp) is a Git submodule, in `engines/llama.cpp`, pinned to release b11840: Bonsai's `Q2_0` weights need b11555 or newer. [`docker/llm.Dockerfile`](../docker/llm.Dockerfile) compiles its `llama-server` with CUDA for one GPU architecture, 89 for the RTX 4090, in an image of its own: the image of the bridge and the tests needs no GPU, and CI never builds the LLM.
 
-[`docker/compose.yaml`](../docker/compose.yaml) starts two containers, `llm` and `bridge`, on the host's network, and starts the bridge only once `llama-server` answers `/health`, when the model is loaded. [`bin/download-model.sh`](../bin/download-model.sh) downloads the model first, into `models/`, pinned to one revision of its repository on Hugging Face, and checks its SHA-256.
+[`docker/compose.yaml`](../docker/compose.yaml) starts three containers, `llm`, `bridge` and `speech`, on the host's network, and starts the bridge and the speech server only once `llama-server` answers `/health`, when the model is loaded. The speech server, [Speech-to-Speech](https://github.com/huggingface/speech-to-speech), is a submodule too, in `engines/speech-to-speech`, in an image of its own, [`docker/speech.Dockerfile`](../docker/speech.Dockerfile); it runs as the host's user, with the models of the host's `~/.cache`. [`bin/download-model.sh`](../bin/download-model.sh) downloads the model first, into `models/`, pinned to one revision of its repository on Hugging Face, and checks its SHA-256.
 
 `llama-server` serves one model, always loaded, for one voice: `--parallel 1`, an 8K context, every layer on the GPU, flash attention, the model card's sampling, and the alias `bonsai-2-27b`. Thinking is off, with `--reasoning off`: a command is one JSON object that the schema already constrains, and thinking first would make every answer seconds slower without making it better on our examples.
 
@@ -362,11 +397,11 @@ There is no second thread because there is no rclpy: a ROS 2 node would need its
 
 | Test | What it covers |
 |---|---|
-| `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply and a call inside it, a yes with nothing waiting, the greeting, closing during a command. |
-| `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the summary of older turns written without the model and kept out of the history, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through. |
+| `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply and a call inside it, a yes with nothing waiting, the greeting, closing during a command; the sleep command confirmed or declined, every turn muted while asleep, stop while asleep, only the exact wake phrase waking it, the state told to the client. |
+| `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the summary of older turns written without the model and kept out of the history, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through; the sleep state from the history, a sleeping turn kept from the model, the history without the sleeping turns. |
 | `test_confirmation.py` | The state machine, with a fake clock. |
-| `test_phrases.py` | What counts as yes, no and stop, and what does not, e.g. "yes but 20 degrees", "right". |
-| `test_catalogue.py` | The robot file: short forms, the tool of the LLM, the check of arguments, and each mistake the loader finds. |
+| `test_phrases.py` | What counts as yes, no and stop, and what does not, e.g. "yes but 20 degrees", "right"; the wake phrase said alone, and with anything else. |
+| `test_catalogue.py` | The robot file: short forms, the tool of the LLM, the check of arguments, the sleep section, and each mistake the loader finds. |
 | `test_templating.py` | Typed results, the filters, the sandbox, undefined names. |
 | `test_planner.py` | The order of `prepare`, reads, refusals, outcome sentences. |
 | `test_rosbridge.py` | The client against a fake rosbridge: services, goals and their cancellation, latched topics, fragments, a lost connection; how an objective is judged. |
@@ -402,7 +437,7 @@ Not tested automatically, and how to check it by hand:
 
 **YAML templates, not Python plugins.** A command could be a Python class, discovered as a plugin. Here a command is a dozen lines of YAML: anyone who can read the rig's objectives can add one, and the loader checks it before anything runs. The price: a command that needs real logic, e.g. a loop, does not fit; it becomes an objective of the commander, which is where the logic of the rig belongs anyway.
 
-**One choice per command.** Each command is a choice of its own in the schema, with the schema of its parameters, and a tool of its own for the speech server, not one generic command with a name. The schema guides the values, e.g. a direction is one of two words. The price: the LLM's prompt grows with the commands: for StepIt Macro's fifteen, the tools are about 6,300 characters and the instructions 1,800.
+**One choice per command.** Each command is a choice of its own in the schema, with the schema of its parameters, and a tool of its own for the speech server, not one generic command with a name. The schema guides the values, e.g. a direction is one of two words. The price: the LLM's prompt grows with the commands: for StepIt Macro's sixteen, the tools are about 6,700 characters and the instructions 2,200.
 
 **The bridge answers for the LLM, rather than speaking itself.** The bridge has no voice of its own: only the speech server's TTS speaks, and it speaks what its LLM writes. So the bridge became the speech server's LLM, and answers with its own sentences when it has one. The voice says them exactly, in the same voice as the rest. A TTS in the bridge would be exact too, at the price of a second voice and a second model on the GPU. The price of the proxy: the speech server must be configured to reach its LLM through the bridge.
 

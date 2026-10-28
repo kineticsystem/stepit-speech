@@ -4,7 +4,7 @@
 import pytest
 
 from voicebridge.robotfile.loader import RobotFileError, parse, read_yaml
-from voicebridge.robotfile.model import ArgumentError
+from voicebridge.robotfile.model import SLEEP_COMMAND, ArgumentError
 
 MINIMAL = """
 confirmation:
@@ -120,3 +120,73 @@ def test_the_stop_words_need_a_stop_command():
         robot(MINIMAL.replace("  confirm: [yes]", "  confirm: [yes]\n  stop: [stop]"))
     with pytest.raises(RobotFileError, match="no command named"):
         robot(MINIMAL.replace("  confirm: [yes]", "  confirm: [yes]\n  stop: [stop]\n  stop_command: halt"))
+
+
+# ── The sleep mode ─────────────────────────────────────────────────────────────
+
+SLEEP = """
+sleep:
+  wake: ["Wake up, robot", wake up robots]
+  examples: [go to sleep, take a nap]
+"""
+
+
+def test_without_a_sleep_section_there_is_no_sleep_mode():
+    catalogue = robot()
+    assert catalogue.sleep is None
+    assert SLEEP_COMMAND not in catalogue.commands
+
+
+def test_the_sleep_section_makes_a_confirmed_command_that_runs_nothing():
+    catalogue = robot(MINIMAL + SLEEP)
+    command = catalogue.commands[SLEEP_COMMAND]
+    assert command.confirm is True
+    assert command.run is None and not command.reads and not command.parameters
+    assert [example.phrase for example in command.examples] == ["go to sleep", "take a nap"]
+    assert command.say == "Putting the voice to sleep."
+    sleep = catalogue.sleep
+    assert sleep.wake == ("Wake up, robot", "wake up robots")
+    assert sleep.asleep == "Going to sleep. To wake me, say: Wake up, robot."
+    assert sleep.awake == "I'm listening."
+    assert sleep.example == "go to sleep"
+    assert SLEEP_COMMAND in {tool["name"] for tool in catalogue.tool_specs()}
+
+
+def test_the_sentences_of_the_sleep_mode_can_be_written():
+    text = MINIMAL + SLEEP + "  say: Sleeping.\n  asleep: Good night.\n  awake: Hello again.\n"
+    catalogue = robot(text)
+    assert catalogue.commands[SLEEP_COMMAND].say == "Sleeping."
+    assert (catalogue.sleep.asleep, catalogue.sleep.awake) == ("Good night.", "Hello again.")
+
+
+@pytest.mark.parametrize(("old", "new", "complaint"), [
+    ('  wake: ["Wake up, robot", wake up robots]\n', "", "sleep.wake: list the phrase"),
+    ("  examples: [go to sleep, take a nap]\n", "", "sleep.examples: list what we say"),
+    ("  examples: [go to sleep, take a nap]\n", "  examples: [go to sleep]\n  snooze: 5\n", "snooze"),
+])
+def test_a_wrong_sleep_section_says_where(old, new, complaint):
+    with pytest.raises(RobotFileError, match=complaint):
+        robot(MINIMAL + SLEEP.replace(old, new))
+
+
+def test_no_sleep_phrase_may_hold_a_stop_word():
+    # "Stop listening" would stop the robot before the LLM heard the rest.
+    halt = "  halt:\n    description: Halts.\n    say: Halting.\n    confirm: false\n    run:\n      move: {}\n"
+    stops = MINIMAL.replace("  confirm: [yes]", "  confirm: [yes]\n  stop: [stop]\n  stop_command: halt") + halt
+    with pytest.raises(RobotFileError, match=r"sleep.examples: 'stop listening' holds the stop word 'stop'"):
+        robot(stops + SLEEP.replace("take a nap", "stop listening"))
+    with pytest.raises(RobotFileError, match=r"sleep.wake: 'wake up and stop'"):
+        robot(stops + SLEEP.replace("wake up robots", "wake up and stop"))
+    # "nonstop" holds no stop word.
+    assert robot(stops + SLEEP.replace("take a nap", "sleep nonstop")).sleep is not None
+
+
+def test_no_command_may_take_the_sleep_command_name():
+    text = MINIMAL + """  sleep:
+    description: Sleeps.
+    say: Sleeping.
+    run:
+      move: {}
+""" + SLEEP
+    with pytest.raises(RobotFileError, match="commands.sleep: the name is the sleep section's command"):
+        robot(text)

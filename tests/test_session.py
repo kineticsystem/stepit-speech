@@ -214,6 +214,16 @@ async def test_anything_else_drops_the_command_and_goes_to_the_llm(harness):
     assert harness.robot.requests == []
 
 
+async def test_an_empty_transcript_keeps_the_pending_command(harness):
+    # Seen on the rig: a noise became an empty transcript, which dropped the command waiting for its yes.
+    await armed(harness)
+    for said in ("", " ", "..."):
+        await harness.user_says(said)
+    assert harness.session.confirmation.phase is Phase.ARMED
+    await harness.user_says("yes")
+    assert harness.robot.targets == ["/arm/move"]
+
+
 async def test_a_late_yes_runs_nothing(harness):
     await armed(harness)
     harness.clock.now += 11
@@ -452,4 +462,141 @@ async def test_without_a_greeting_the_llm_greets(harness):
     await harness.session.from_browser(GREETING_PROMPT)
     await harness.session.from_browser({"type": "response.create"})
     assert harness.count("conversation.item.create") == 1
+    assert harness.said() == []
+
+
+# ── Sleeping and waking ────────────────────────────────────────────────────────
+
+SLEEP_READ_BACK = "Putting the voice to sleep. Say yes to confirm."
+ASLEEP = "Going to sleep. To wake me, say: Wake up, robot."
+AWAKE = "I'm listening."
+
+
+@pytest.fixture
+def sleepy(sleepy_arm):
+    return Harness(sleepy_arm)
+
+
+def states(harness: Harness) -> list[str]:
+    return [event["state"] for event in harness.browser if event.get("type") == "voicebridge.state"]
+
+
+async def asleep(harness: Harness) -> None:
+    """The sleep command, read back and confirmed: the voice sleeps."""
+    rid = await harness.llm_calls("sleep", {})
+    await harness.response_done(rid)
+    await harness.bridge_reply_said(SLEEP_READ_BACK)
+    await harness.user_says("yes")
+    await harness.bridge_reply_said(ASLEEP)
+    assert harness.session.asleep
+
+
+async def test_the_sleep_command_is_confirmed_and_runs_nothing_on_the_robot(sleepy):
+    rid = await sleepy.llm_calls("sleep", {})
+    await sleepy.response_done(rid)
+    assert sleepy.said() == [SLEEP_READ_BACK]
+    assert not sleepy.session.asleep
+    await sleepy.bridge_reply_said(SLEEP_READ_BACK)
+    await sleepy.user_says("yes")
+    assert sleepy.said()[-1] == ASLEEP
+    assert sleepy.session.asleep
+    assert sleepy.robot.requests == []
+    assert states(sleepy) == ["asleep"]
+
+
+async def test_a_declined_sleep_keeps_the_voice_awake(sleepy):
+    rid = await sleepy.llm_calls("sleep", {})
+    await sleepy.response_done(rid)
+    await sleepy.bridge_reply_said(SLEEP_READ_BACK)
+    await sleepy.user_says("no")
+    assert not sleepy.session.asleep
+    assert sleepy.said()[-1] == CANCELLED
+
+
+async def test_asleep_every_turn_is_muted_and_cancelled(sleepy):
+    await asleep(sleepy)
+    said = len(sleepy.said())
+    cancels = sleepy.count("response.cancel")
+    await sleepy.user_says("turn left 10 degrees")
+    assert sleepy.count("response.cancel") == cancels + 1
+    before = len(sleepy.browser)
+    await sleepy.server_replies_itself("Turning left.")
+    assert sleepy.browser[before:] == []
+    assert len(sleepy.said()) == said
+    assert sleepy.session.asleep
+
+
+async def test_asleep_a_command_of_the_llm_is_not_run(sleepy):
+    await asleep(sleepy)
+    await sleepy.user_says("turn left 10 degrees")
+    rid = await sleepy.llm_calls("turn_joint", {"degrees": 10, "direction": "left"})
+    await sleepy.response_done(rid)
+    assert sleepy.outputs()[-1] == MUTED_CALL
+    await sleepy.user_says("yes")
+    assert sleepy.robot.requests == []
+
+
+async def test_asleep_stop_still_stops(sleepy):
+    await asleep(sleepy)
+    await sleepy.user_says("stop")
+    assert sleepy.robot.targets == ["/arm/halt"]
+    assert sleepy.said()[-1] == "Halted."
+    assert sleepy.session.asleep
+
+
+async def test_only_the_wake_phrase_said_alone_wakes(sleepy):
+    await asleep(sleepy)
+    for said in ("wake up robot please", "wake up robot and turn left 10 degrees", "wake up",
+                 "Please wake up robot.", "Wake up, robot. Turn left 10 degrees."):
+        await sleepy.user_says(said)
+        assert sleepy.session.asleep, said
+    await sleepy.user_says("Wake up, robot!")
+    assert not sleepy.session.asleep
+    assert sleepy.said()[-1] == AWAKE
+    assert states(sleepy) == ["asleep", "awake"]
+    assert sleepy.robot.requests == []
+
+
+async def test_the_wake_phrase_wakes_at_the_end_of_a_turn_that_grew_while_asleep(sleepy):
+    # As on the rig: the speech server keeps the turn open after each cancelled reply.
+    await asleep(sleepy)
+    await sleepy.user_says("Can you hear me?")
+    await sleepy.user_says("Can you hear me? Hello, can you hear me? Wake up.")
+    assert sleepy.session.asleep
+    await sleepy.user_says("Can you hear me? Hello, can you hear me? Wake up. Robot.")
+    assert not sleepy.session.asleep
+    assert sleepy.said()[-1] == AWAKE
+
+
+async def test_awake_again_commands_work(sleepy):
+    await asleep(sleepy)
+    await sleepy.user_says("wake up robots")
+    await sleepy.bridge_reply_said(AWAKE)
+    await sleepy.user_says("turn left 10 degrees")
+    rid = await sleepy.llm_calls("turn_joint", {"degrees": 10, "direction": "left"})
+    await sleepy.response_done(rid)
+    await sleepy.bridge_reply_said(READ_BACK)
+    await sleepy.user_says("yes")
+    assert sleepy.robot.targets == ["/arm/move"]
+
+
+async def test_a_session_starts_awake_and_tells_its_client_the_phrases(sleepy):
+    await sleepy.session.from_browser({"type": "session.update", "session": {}})
+    await sleepy.session.from_browser({"type": "session.update", "session": {}})
+    told = [event for event in sleepy.browser if event.get("type") == "voicebridge.state"]
+    assert told == [{"type": "voicebridge.state", "state": "awake", "wake": "Wake up, robot", "sleep": "go to sleep"}]
+    assert not sleepy.session.asleep
+
+
+async def test_the_llm_is_told_to_call_the_sleep_command(sleepy, harness):
+    for each in (sleepy, harness):
+        await each.session.from_browser({"type": "session.update", "session": {}})
+    assert "call the tool sleep" in sleepy.upstream[0]["session"]["instructions"]
+    assert "sleep" not in harness.upstream[0]["session"]["instructions"]
+
+
+async def test_without_a_sleep_mode_there_is_no_state_and_no_wake_phrase(harness):
+    await harness.session.from_browser({"type": "session.update", "session": {}})
+    await harness.user_says("wake up robot")
+    assert states(harness) == []
     assert harness.said() == []

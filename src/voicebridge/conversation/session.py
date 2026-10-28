@@ -17,6 +17,11 @@ through unchanged. It holds the safety rules of the bridge:
    mute and cancel the speech server's own reply to that turn, and speaks its own.
 6. When the robot has a greeting, it says it in place of the browser's
    opening message, which asks the LLM to greet in its own words.
+7. When the robot file has a sleep section, the voice can sleep: the sleep
+   command, once confirmed, runs nothing on the robot and puts it to sleep.
+   Asleep, every turn is muted and cancelled, but stop still stops; only a
+   wake phrase, said as sentences of its own at the end of the turn, wakes it. A session starts awake, and tells its
+   client the state, ``voicebridge.state``, at the start and at every change.
 
 How a sentence reaches the voice, queued, tagged and one at a time, is the
 ``Speaker``'s. Its I/O is two async functions, ``to_browser`` and
@@ -41,14 +46,15 @@ from voicebridge.conversation.events import (
     inject_session,
     response_id,
     scrub_response_done,
+    state,
 )
 from voicebridge.conversation.prompt import AWAITING_CONFIRMATION, instructions
 from voicebridge.conversation.speaker import Send, Speaker, Spoken
 from voicebridge.robot.planner import Planner, Prepared, Rejected
 from voicebridge.robot.request import Robot
-from voicebridge.robotfile.model import Catalogue
+from voicebridge.robotfile.model import SLEEP_COMMAND, Catalogue
 from voicebridge.safety.confirmation import Confirmation, Phase, Verdict
-from voicebridge.safety.phrases import Meaning, PhraseMatcher
+from voicebridge.safety.phrases import Meaning, PhraseMatcher, ends_with, words
 
 log = logging.getLogger("voicebridge.session")
 
@@ -91,6 +97,8 @@ class Session:
         self._commanded: set[str] = set()                 # responses that already called a command
         self._greeted = not catalogue.greeting            # no greeting: nothing to replace
         self._skip_create = False                         # the response.create of the opening message
+        self._asleep = False                              # a session starts awake
+        self._told_state = catalogue.sleep is None        # no sleep mode: no state to tell
         self._tasks: set[asyncio.Task] = set()
 
     # ── The two directions ─────────────────────────────────────────────────────
@@ -108,6 +116,10 @@ class Session:
             self._skip_create = False
             return
         await self._to_upstream(inject_session(event, self._tools, self._instructions))
+        if not self._told_state and event.get("type") == "session.update":
+            # The client has started its session: it learns the state and the phrases once, then every change.
+            self._told_state = True
+            await self._tell_state()
 
     async def from_upstream(self, event: dict[str, Any]) -> None:
         kind = event.get("type")
@@ -200,6 +212,10 @@ class Session:
     # ── The user ───────────────────────────────────────────────────────────────
 
     async def _on_user_said(self, transcript: str) -> None:
+        if not words(transcript):
+            # A noise that speech-to-text made nothing of: it says nothing, so it cancels nothing.
+            log.info("Ignored an empty transcript %r", transcript)
+            return
         meaning = self._matcher.classify(transcript)
         stop = self._catalogue.confirmation.stop_command
         if stop is not None and self._matcher.mentions_stop(transcript):
@@ -214,11 +230,33 @@ class Session:
                 # "Stop the live view": the robot stops, and the LLM still hears the rest.
                 self._spawn(self._run_now(stop, speak=False))
             return
-        answer = self.confirmation.answer(meaning)
-        if answer.verdict is Verdict.RUN and answer.command is not None:
-            log.info("Confirmed by %r: %s", transcript, answer.command.command.name)
+        sleep = self._catalogue.sleep
+        if sleep is not None and ends_with(transcript, sleep.wake):
+            # Asleep or awake, the wake phrase is the bridge's to answer, never the LLM's.
+            log.info("Woken by %r", transcript)
+            self.confirmation.cancel()
             await self._speaker.take_over()
-            self._spawn(self._run_confirmed(answer.command))
+            await self._set_asleep(False)
+            self._speaker.say(sleep.awake)
+            await self._speaker.pump()
+            return
+        if self._asleep:
+            log.info("Asleep: ignored %r", transcript)
+            await self._speaker.take_over()
+            await self._speaker.pump()
+            return
+        answer = self.confirmation.answer(meaning)
+        confirmed = answer.command if answer.verdict is Verdict.RUN else None
+        if confirmed is not None and sleep is not None and confirmed.command.name == SLEEP_COMMAND:
+            # Nothing runs on the robot: the voice falls asleep, and says how to wake it.
+            log.info("Confirmed by %r: asleep", transcript)
+            await self._speaker.take_over()
+            await self._set_asleep(True)
+            self._speaker.say(sleep.asleep)
+        elif confirmed is not None:
+            log.info("Confirmed by %r: %s", transcript, confirmed.command.name)
+            await self._speaker.take_over()
+            self._spawn(self._run_confirmed(confirmed))
         elif answer.verdict is Verdict.DECLINED:
             await self._speaker.take_over()
             self._speaker.say(CANCELLED)
@@ -233,6 +271,20 @@ class Session:
         elif answer.verdict is Verdict.DROPPED:
             log.info("Dropped the pending command: the user said %r", transcript)
         await self._speaker.pump()
+
+    async def _set_asleep(self, asleep: bool) -> None:
+        if self._asleep != asleep:
+            self._asleep = asleep
+            await self._tell_state()
+
+    async def _tell_state(self) -> None:
+        sleep = self._catalogue.sleep
+        if sleep is not None:
+            await self._to_browser(state(self._asleep, sleep.wake[0], sleep.example))
+
+    @property
+    def asleep(self) -> bool:
+        return self._asleep
 
     # ── The LLM's tool calls ───────────────────────────────────────────────────
 

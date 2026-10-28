@@ -24,6 +24,7 @@ import yaml
 from voicebridge.robotfile.model import (
     CALL_KINDS,
     PARAMETER_TYPES,
+    SLEEP_COMMAND,
     ArgumentError,
     Call,
     Catalogue,
@@ -31,6 +32,7 @@ from voicebridge.robotfile.model import (
     ConfirmationSettings,
     Example,
     Parameter,
+    SleepSettings,
     Use,
     to_number,
 )
@@ -42,7 +44,7 @@ class RobotFileError(Exception):
 
 
 _TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
-_TOP_KEYS = {"robot", "rosbridge", "confirmation", "calls", "commands"}
+_TOP_KEYS = {"robot", "rosbridge", "confirmation", "sleep", "calls", "commands"}
 _ROBOT_KEYS = {"name", "description", "instructions", "greeting"}
 _CONFIRMATION_KEYS = {"timeout_s", "prompt", "confirm", "decline", "stop", "fillers", "stop_command"}
 _CALL_KEYS = {"description", "type", "request", "qos", "success", "message", "result", "timeout_s", *CALL_KINDS}
@@ -50,6 +52,7 @@ _COMMAND_KEYS = {
     "description", "parameters", "say", "run", "read", "let", "require",
     "confirm", "started", "done", "failed", "examples",
 }
+_SLEEP_KEYS = {"wake", "examples", "description", "say", "asleep", "awake"}
 _PARAMETER_KEYS = {"type", "description", "choices", "min", "max", "optional"}
 
 
@@ -111,6 +114,12 @@ def parse(data: Any, source: str = "robot file") -> Catalogue:
     }
 
     confirmation = _parse_confirmation(data.get("confirmation", {}), commands, f"{source}: confirmation")
+    sleep = None
+    if "sleep" in data:
+        if SLEEP_COMMAND in commands:
+            raise RobotFileError(f"{source}: commands.{SLEEP_COMMAND}: the name is the sleep section's command; "
+                                 "rename it")
+        sleep, commands[SLEEP_COMMAND] = _parse_sleep(data["sleep"], confirmation, f"{source}: sleep")
     return Catalogue(
         name=str(robot.get("name", "the robot")),
         description=str(robot.get("description", "")).strip(),
@@ -120,7 +129,56 @@ def parse(data: Any, source: str = "robot file") -> Catalogue:
         confirmation=confirmation,
         calls=calls,
         commands=commands,
+        sleep=sleep,
     )
+
+
+def _parse_sleep(spec: Any, confirmation: ConfirmationSettings, where: str) -> tuple[SleepSettings, Command]:
+    """The sleep mode, and its command: read back and confirmed, with nothing to run on the robot."""
+    spec = _mapping(spec, where)
+    _no_unknown_keys(spec, _SLEEP_KEYS, where)
+    wake = tuple(str(phrase).strip() for phrase in _list(spec.get("wake", []), f"{where}.wake") if str(phrase).strip())
+    if not wake:
+        raise RobotFileError(f"{where}.wake: list the phrase that wakes the voice, e.g. wake up robot")
+    examples = tuple(str(phrase).strip() for phrase in _list(spec.get("examples", []), f"{where}.examples")
+                     if str(phrase).strip())
+    if not examples:
+        raise RobotFileError(f"{where}.examples: list what we say to put the voice to sleep, e.g. go to sleep")
+    for key, phrases in (("wake", wake), ("examples", examples)):
+        for phrase in phrases:
+            stop = _stop_word_in(phrase, confirmation.stop)
+            if stop is not None:
+                raise RobotFileError(f"{where}.{key}: {phrase!r} holds the stop word {stop!r}, which would stop "
+                                     "the robot: say it another way")
+    settings = SleepSettings(
+        wake=wake,
+        asleep=str(spec.get("asleep") or f"Going to sleep. To wake me, say: {wake[0]}.").strip(),
+        awake=str(spec.get("awake") or "I'm listening.").strip(),
+        example=examples[0],
+    )
+    command = Command(
+        name=SLEEP_COMMAND,
+        description=str(spec.get("description") or (
+            "Puts the voice to sleep: until the user says the wake phrase, it hears nothing but stop. "
+            "It does not stop the robot.")).strip(),
+        say=str(spec.get("say") or "Putting the voice to sleep.").strip(),
+        examples=tuple(Example(phrase=phrase, expect={}) for phrase in examples),
+    )
+    return settings, command
+
+
+def _stop_word_in(phrase: str, stops: tuple[str, ...]) -> str | None:
+    """The stop phrase that a phrase holds, if any, word by word as the bridge hears it (safety.phrases)."""
+    said = _SPOKEN_WORD.findall(phrase.lower())
+    for stop in stops:
+        words = _SPOKEN_WORD.findall(stop.lower())
+        if words and any(said[i:i + len(words)] == words for i in range(len(said) - len(words) + 1)):
+            return stop
+    return None
+
+
+# A spoken word, as safety.phrases splits a transcript.
+_SPOKEN_WORD = re.compile(r"[a-z0-9']+")
 
 
 def _parse_call(name: str, spec: Any, where: str) -> Call:

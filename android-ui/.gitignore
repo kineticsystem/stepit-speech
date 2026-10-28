@@ -1,0 +1,8 @@
+# Gradle's and Android's homes of ./docker/dock.sh android, and the build.
+.cache/
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/

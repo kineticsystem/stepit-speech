@@ -32,7 +32,12 @@ never seem to run a command that the bridge has not read back:
 4. **No follow-up.** After the bridge answers a command, the speech server
    asks the model to go on; the bridge speaks next, so the proxy answers with
    nothing, except after a rejection, which the model explains.
-5. **No summaries.** The speech server's own request to summarise older turns
+5. **Nothing while asleep.** The voice sleeps from the bridge's sentence on
+   falling asleep to its sentence on waking up: the proxy finds the later of the
+   two in each request's history, answers a sleeping turn with nothing, and
+   never shows the model the turns between them. It shares no state with the
+   session: the history is the truth.
+6. **No summaries.** The speech server's own request to summarise older turns
    is answered with ``chat.SUMMARY``, without the model, which would retell the
    bridge's sentences as its own actions; ``SUMMARY`` never reaches the model.
 
@@ -53,6 +58,7 @@ from aiohttp import web
 from voicebridge.llmproxy.chat import (
     after_command,
     asks_for_summary,
+    asleep,
     chunks,
     completion,
     last_user_text,
@@ -60,6 +66,7 @@ from voicebridge.llmproxy.chat import (
     scripted,
     summary,
     without,
+    without_sleep,
     without_summary,
 )
 from voicebridge.llmproxy.decision import commands_only, settle, structured
@@ -137,6 +144,12 @@ class LlmProxy:
             log.info("Summarised older turns as left out, without the model")
             return await self._answer(request, body, completion(model, summary(), []))
 
+        guard = self._guard
+        if guard.falls_asleep and asleep(body, guard.falls_asleep, guard.wakes_up):
+            # The voice sleeps: the session mutes this turn, and the model never hears it.
+            log.info("Asleep: left out %r", last_user_text(body))
+            return await self._answer(request, body, completion(model, "", []))
+
         upstream_body = structured(body)
         if upstream_body is None:
             return await self._pass(request, raw)
@@ -150,6 +163,9 @@ class LlmProxy:
             # Yes, no or stop: the bridge answers it, and the model must not answer it too.
             log.info("Left to the bridge: %r", heard)
             return await self._answer(request, body, completion(model, "", []))
+        if guard.falls_asleep:
+            # First: the bridge's two sentences, which mark the sleeping turns, are removed next.
+            upstream_body = without_sleep(upstream_body, guard.falls_asleep, guard.wakes_up)
         upstream_body = without(without_summary(upstream_body), set(self._said))
         answer = await self._ask(upstream_body, request.headers)
         if isinstance(answer, web.Response):
