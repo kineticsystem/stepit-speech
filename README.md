@@ -118,6 +118,8 @@ The bridge listens for the browser on port 8766 and forwards to the speech serve
 | `VOICEBRIDGE_ROSBRIDGE` | the robot file's | rosbridge, e.g. `ws://<rig-address>:9090` for a rig on the Raspberry Pi. |
 | `LLM_PORT` | `8085` | Where `llama-server` listens. |
 
+The container cannot resolve mDNS names such as `stepit.local`. `dock.sh` resolves on the host every `.local` name in the robot file, `VOICEBRIDGE_ROSBRIDGE`, `VOICEBRIDGE_UPSTREAM` and `VOICEBRIDGE_LLM_URL`, and passes it to the bridge's container. The address is fixed when the bridge starts: when the rig's address changes, restart the bridge.
+
 To try the bridge against another LLM server, start the bridge alone, pointed at it. The server must enforce a JSON schema, as `llama-server` does:
 
 ```bash
@@ -256,6 +258,8 @@ They check the style with ruff, prepare every example of every robot file, and r
 ## Troubleshooting
 
 **The voice says "That did not work: cannot reach rosbridge at ws://localhost:9090".** The rig is not running, or its rosbridge is elsewhere: start it, or set `VOICEBRIDGE_ROSBRIDGE`.
+
+**The voice says "That did not work: cannot reach rosbridge at ws://stepit.local:9090", but the rig is running.** The bridge runs in a container, which cannot resolve mDNS names. Start it with `./docker/dock.sh serve` or `./docker/dock.sh bridge`, which resolve the name on the host, or give the rig's address, e.g. `VOICEBRIDGE_ROSBRIDGE=ws://192.168.100.25:9090`.
 
 **The voice says "There is no command waiting for confirmation, so nothing was done."** The bridge heard a yes, but no command was waiting: say the command itself, and answer its read-back. The speech-to-text can also mishear a word: "confirm" was once heard as "Koncern", which cancels the command. Say "yes".
 

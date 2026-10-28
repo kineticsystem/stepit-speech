@@ -25,6 +25,38 @@ llama_cpp() {
     [ -e "$ROOT/engines/llama.cpp/CMakeLists.txt" ] || git -C "$ROOT" submodule update --init engines/llama.cpp
 }
 
+# The containers cannot resolve mDNS names, e.g. stepit.local: the host resolves each
+# one named by the robot file or the bridge's variables, and the bridge gets it as an
+# --add-host, or as an extra host of compose.
+function mdns_hosts() {
+    local names name address
+    names=$( (cat "$ROOT/$ROBOT" 2>/dev/null; echo "$VOICEBRIDGE_ROSBRIDGE $VOICEBRIDGE_UPSTREAM $VOICEBRIDGE_LLM_URL") \
+        | grep -oE '[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.local\b' | sort -u)
+    for name in $names; do
+        address=$(getent ahostsv4 "$name" | awk 'NR == 1 { print $1 }')
+        if [ -z "$address" ]; then
+            echo "Cannot resolve $name: is the machine on the network?" >&2
+            exit 1
+        fi
+        HOSTS+=("$name:$address")
+        ADD_HOSTS+=(--add-host "$name:$address")
+    done
+}
+HOSTS=()
+ADD_HOSTS=()
+
+# The extra hosts of the bridge, as a compose file that docker/compose.yaml is merged with.
+function mdns_compose() {
+    local host
+    echo "services:"
+    echo "  bridge:"
+    echo "    extra_hosts: ["
+    for host in "${HOSTS[@]}"; do
+        echo "      \"$host\","
+    done
+    echo "    ]"
+}
+
 case "$1" in
     build)
         docker build -f "$ROOT/docker/Dockerfile" -t "$IMAGE" "$ROOT"
@@ -44,20 +76,26 @@ case "$1" in
         "$ROOT/bin/download-model.sh"
         export ROBOT HOST_UID HOST_GID
         HOST_UID=$(id -u) HOST_GID=$(id -g)
+        mdns_hosts
+        HOSTS_FILE=$(mktemp --suffix .yaml)
+        mdns_compose > "$HOSTS_FILE"
+        COMPOSE+=(-f "$HOSTS_FILE")
         # Ctrl-C, or the end of either, stops both.
-        trap '"${COMPOSE[@]}" down' EXIT
+        trap '"${COMPOSE[@]}" down; rm -f "$HOSTS_FILE"' EXIT
         "${COMPOSE[@]}" up --abort-on-container-exit
         ;;
     bridge)
         # The host's network: the bridge reaches the speech server, rosbridge, the LLM
         # and the browser on the host's ports, e.g. 8765, 9090, 8085 and 8766, and the
         # speech server reaches its LLM proxy on 8767.
-        "${RUN[@]}" -it --network host -e VOICEBRIDGE_UPSTREAM -e VOICEBRIDGE_ROSBRIDGE -e VOICEBRIDGE_LISTEN \
+        mdns_hosts
+        "${RUN[@]}" -it --network host "${ADD_HOSTS[@]}" -e VOICEBRIDGE_UPSTREAM -e VOICEBRIDGE_ROSBRIDGE -e VOICEBRIDGE_LISTEN \
             -e VOICEBRIDGE_LLM_LISTEN -e VOICEBRIDGE_LLM_URL -e VOICEBRIDGE_LLM_MODEL \
             "$IMAGE" voicebridge serve "$ROBOT"
         ;;
     shell)
-        "${RUN[@]}" -it --network host "$IMAGE" bash
+        mdns_hosts
+        "${RUN[@]}" -it --network host "${ADD_HOSTS[@]}" "$IMAGE" bash
         ;;
     *)
         echo "Usage: $0 build | build-llm | test | models | serve [robot file] | bridge [robot file] | shell"
