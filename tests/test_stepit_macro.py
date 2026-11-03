@@ -79,21 +79,31 @@ async def test_manual_drive_off_hands_the_rig_to_the_trajectory_controller(stepi
     assert goal == {"target_tree": "ActivateController", "payload": "{controllers: joint_trajectory_controller}"}
 
 
-async def test_a_focus_stack_reads_the_plan_of_the_rig(stepit_macro):
-    plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
-            "state.far": [2.0]}
-    sentence, goal = await objective(stepit_macro, "start_focus_stack", {}, reads={"plan": plan})
+PLAN = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0], "state.far": [2.0]}
+
+
+async def test_a_full_stack_reads_the_plan_of_the_rig(stepit_macro):
+    sentence, goal = await objective(stepit_macro, "start_full_stack", {}, reads={"plan": PLAN})
     assert sentence == "Stacking 10 shots at 35 angles, plus or minus 17 degrees: 350 pictures."
     assert goal == {"target_tree": "FocusStack",
                     "payload": "{shots: 10, stage_from: -17.0, stage_to: 17.0, angles: 35}"}
 
 
+async def test_one_stack_is_where_the_stage_stands_whatever_the_plan(stepit_macro):
+    # FocusStack's angles are from where the stage stands: one angle at 0 does not turn it.
+    sentence, goal = await objective(stepit_macro, "start_stack", {}, reads={"plan": PLAN})
+    assert sentence == "Stacking 10 shots at this angle."
+    assert goal == {"target_tree": "FocusStack",
+                    "payload": "{shots: 10, stage_from: 0.0, stage_to: 0.0, angles: 1}"}
+
+
+@pytest.mark.parametrize("command", ["start_stack", "start_full_stack"])
 @pytest.mark.parametrize("missing, complaint", [("state.near", "near end"), ("state.far", "far end")])
-async def test_a_focus_stack_needs_both_marks(stepit_macro, missing, complaint):
+async def test_a_focus_stack_needs_both_marks(stepit_macro, command, missing, complaint):
     plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
             "state.far": [2.0], missing: []}
     with pytest.raises(Rejected, match=complaint):
-        await Planner(stepit_macro, None).prepare("start_focus_stack", {}, reads={"plan": plan})
+        await Planner(stepit_macro, None).prepare(command, {}, reads={"plan": plan})
 
 
 async def test_set_stack_needs_something_to_change(stepit_macro):
