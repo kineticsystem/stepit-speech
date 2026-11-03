@@ -16,6 +16,10 @@ The operations are those of StepIt UI's rosbridge.ts:
 The client connects on first use and again after the connection drops, e.g.
 while the robot restarts. It never retries an operation: a goal whose end is
 unknown fails, so that the user is told rather than misled.
+
+The bridge also keeps it connected (``keep_connected``), so that the first
+command does not wait for the connection: over Wi-Fi, the robot's first
+answer after a quiet spell took more than 3 seconds, and the command failed.
 """
 
 from __future__ import annotations
@@ -55,9 +59,10 @@ def _unique_id(what: str) -> str:
 class Rosbridge:
     """One connection to rosbridge, shared by every session of the bridge."""
 
-    def __init__(self, url: str, connect_timeout_s: float = 3.0) -> None:
+    def __init__(self, url: str, connect_timeout_s: float = 10.0) -> None:
         self.url = url
         self._connect_timeout_s = connect_timeout_s
+        self._keeper: asyncio.Task | None = None
         self._socket: Any = None
         self._reader: asyncio.Task | None = None
         self._lock = asyncio.Lock()
@@ -121,7 +126,31 @@ class Rosbridge:
                 self._advertised[topic] = type
             await self._socket.send(json.dumps({"op": "publish", "topic": topic, "msg": message}))
 
+    def keep_connected(self, interval_s: float = 5.0) -> None:
+        """Connects now, in the background, and again every ``interval_s`` while the connection is down."""
+        if self._keeper is None:
+            self._keeper = asyncio.create_task(self._keep_connected(interval_s))
+
+    async def _keep_connected(self, interval_s: float) -> None:
+        reported = False
+        while True:
+            try:
+                async with self._lock:
+                    await self._connect()
+                reported = False
+            except RosbridgeError as exc:
+                if not reported:
+                    # Once per outage: the robot may be off for hours.
+                    log.warning("%s: trying again every %g s", exc, interval_s)
+                    reported = True
+            await asyncio.sleep(interval_s)
+
     async def close(self) -> None:
+        if self._keeper is not None:
+            self._keeper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._keeper
+            self._keeper = None
         socket, self._socket = self._socket, None
         if self._reader is not None:
             self._reader.cancel()

@@ -376,13 +376,13 @@ The LLM is part of the project. [llama.cpp](https://github.com/ggml-org/llama.cp
 
 ## Talking to the Robot
 
-[`robot/rosbridge.py`](../src/voicebridge/robot/rosbridge.py) is a client of [rosbridge's protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros2/ROSBRIDGE_PROTOCOL.md), with the operations of StepIt UI's `rosbridge.ts`: `call_service`, `send_action_goal` and `cancel_action_goal`, `subscribe` for one message, and `publish`. It connects on first use, and again after the connection drops, e.g. while the rig restarts. It never repeats a request: a goal whose end is unknown fails, so that we are told rather than misled.
+[`robot/rosbridge.py`](../src/voicebridge/robot/rosbridge.py) is a client of [rosbridge's protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros2/ROSBRIDGE_PROTOCOL.md), with the operations of StepIt UI's `rosbridge.ts`: `call_service`, `send_action_goal` and `cancel_action_goal`, `subscribe` for one message, and `publish`. The bridge connects it when it starts, and again every 5 seconds while the connection is down, e.g. while the rig restarts (`keep_connected`): the first command finds it ready. Over Wi-Fi, a connection opened by the first command after a quiet spell once took more than 3 seconds, and the command failed. It never repeats a request: a goal whose end is unknown fails, so that we are told rather than misled.
 
 [`robot/request.py`](../src/voicebridge/robot/request.py) turns a call into a `Request` with `render_request`, and an answer into an `Outcome` with `judge`, by the call's `success`, `message` and `result` templates. They see `response`, the answer, and `status`, the GoalStatus of an action. Without `success`, an action succeeded when its status is 4 and a service whenever it answered.
 
 | Timeout | Default | Where |
 |---|---|---|
-| Connecting to rosbridge | 3 s | `Rosbridge(connect_timeout_s)` |
+| Connecting to rosbridge | 10 s | `Rosbridge(connect_timeout_s)` |
 | A service | 10 s | `timeout_s` of the call |
 | A latched topic | 3 s | `read_latched_topic` |
 | An objective | 2 hours | `objective` in StepIt Macro's file: a stack of 350 pictures takes about half an hour |

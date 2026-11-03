@@ -16,6 +16,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [008-loudspeaker.md](008-loudspeaker.md) | [#8](https://github.com/kineticsystem/stepit-speech/pull/8) Loudspeaker, a clip-on microphone and shorter read-backs |
 | [009-no-command-on-a-fragment.md](009-no-command-on-a-fragment.md) | [#9](https://github.com/kineticsystem/stepit-speech/pull/9) No command without confirmation on a fragment |
 | [010-distance-unit.md](010-distance-unit.md) | [#10](https://github.com/kineticsystem/stepit-speech/pull/10) The camera's distance in the user's unit |
+| [011-rosbridge-first-connect.md](011-rosbridge-first-connect.md) | [#11](https://github.com/kineticsystem/stepit-speech/pull/11) Connected to rosbridge before the first command |
 
 ## How to Write One
 
