@@ -238,7 +238,7 @@ rotate_stage:
 | `say` | The sentence read back before the command runs. `{{ name }}` is a parameter. |
 | `run` | What to run: a call of the robot file, `objective` here, and its values. |
 | `done` | Optional: what to say once it succeeded. `failed` says what to say when it failed, with `{{ message }}`, the robot's reason. |
-| `examples` | Phrases the user could say, with the parameters the LLM should give. They teach the LLM and test the command. |
+| `examples` | Phrases the user could say, with the parameters the LLM should give. They teach the LLM and test the command. For a command with `confirm: false`, they also give the words that ask for it: it runs only when the user's words share one with its name or its examples. |
 
 To add one:
 

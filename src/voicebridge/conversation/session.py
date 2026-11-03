@@ -22,6 +22,9 @@ through unchanged. It holds the safety rules of the bridge:
    Asleep, every turn is muted and cancelled, but stop still stops; only a
    wake phrase, said as sentences of its own at the end of the turn, wakes it. A session starts awake, and tells its
    client the state, ``voicebridge.state``, at the start and at every change.
+8. A command that runs without confirmation, stop or a query, runs only when
+   the user's last words ask for it (``safety.asked``): the LLM guesses on a
+   fragment, and no read-back would catch it.
 
 How a sentence reaches the voice, queued, tagged and one at a time, is the
 ``Speaker``'s. Its I/O is two async functions, ``to_browser`` and
@@ -53,6 +56,7 @@ from voicebridge.conversation.speaker import Send, Speaker, Spoken
 from voicebridge.robot.planner import Planner, Prepared, Rejected
 from voicebridge.robot.request import Robot
 from voicebridge.robotfile.model import SLEEP_COMMAND, Catalogue
+from voicebridge.safety.asked import asked_for
 from voicebridge.safety.confirmation import Confirmation, Phase, Verdict
 from voicebridge.safety.phrases import Meaning, PhraseMatcher, ends_with, words
 
@@ -67,6 +71,8 @@ BRIDGE_FAILED = "Something went wrong in the bridge. Nothing more was done."
 MUTED_CALL = "Not done: the system answered the user's last words itself. Nothing was done for this call."
 NOTHING_TO_CONFIRM = "There is no command waiting for confirmation, so nothing was done."
 SPOKE_OVER = "I had not finished reading the command back, so nothing was done. Please give the command again."
+NOT_ASKED = ("Rejected: the user's words do not ask for {name}, which runs without confirmation. Nothing was done. "
+             "Ask the user what they want.")
 
 
 class Session:
@@ -98,12 +104,16 @@ class Session:
         self._greeted = not catalogue.greeting            # no greeting: nothing to replace
         self._skip_create = False                         # the response.create of the opening message
         self._asleep = False                              # a session starts awake
+        self._heard: str | None = None                    # the user's last words, spoken or typed
         self._told_state = catalogue.sleep is None        # no sleep mode: no state to tell
         self._tasks: set[asyncio.Task] = set()
 
     # ── The two directions ─────────────────────────────────────────────────────
 
     async def from_browser(self, event: dict[str, Any]) -> None:
+        typed = _user_text(event)
+        if typed is not None and self._greeted:
+            self._heard = typed
         if not self._greeted and _user_message(event):
             # The browser's opening message, e.g. "start the conversation with a greeting":
             # the robot's own greeting answers it, word for word.
@@ -216,6 +226,7 @@ class Session:
             # A noise that speech-to-text made nothing of: it says nothing, so it cancels nothing.
             log.info("Ignored an empty transcript %r", transcript)
             return
+        self._heard = transcript
         meaning = self._matcher.classify(transcript)
         stop = self._catalogue.confirmation.stop_command
         if stop is not None and self._matcher.mentions_stop(transcript):
@@ -307,6 +318,14 @@ class Session:
         await self._speaker.pump()
 
     async def _answer_call(self, call: ToolCall) -> None:
+        wanted = self._catalogue.commands.get(call.name)
+        if wanted is not None and not wanted.confirm and not asked_for(
+                self._heard, wanted, self._catalogue.confirmation):
+            # Nothing would catch a guess: no read-back stands between the call and the robot.
+            log.info("Not asked for: %s(%s) on %r", call.name, call.arguments, self._heard)
+            self._speaker.answer_call(call.call_id, NOT_ASKED.format(name=call.name))
+            self._speaker.let_llm_answer()
+            return
         try:
             if call.arguments is None:
                 raise Rejected("the arguments were not a JSON object.")
@@ -371,6 +390,17 @@ class Session:
         task = asyncio.create_task(guarded())
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+
+def _user_text(event: dict[str, Any]) -> str | None:
+    """The text of a message the user typed, from ``conversation.item.create``; None for any other event."""
+    if not _user_message(event):
+        return None
+    content = event["item"].get("content")
+    if isinstance(content, str):
+        return content
+    parts = content if isinstance(content, list) else []
+    return " ".join(str(part.get("text") or "") for part in parts if isinstance(part, dict))
 
 
 def _user_message(event: dict[str, Any]) -> bool:

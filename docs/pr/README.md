@@ -14,6 +14,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [006-mdns-hosts.md](006-mdns-hosts.md) | [#6](https://github.com/kineticsystem/stepit-speech/pull/6) Resolve .local names on the host for the bridge's container |
 | [007-hands-free.md](007-hands-free.md) | [#7](https://github.com/kineticsystem/stepit-speech/pull/7) Hands-free: the Android app, sleep mode and the whole voice in serve |
 | [008-loudspeaker.md](008-loudspeaker.md) | [#8](https://github.com/kineticsystem/stepit-speech/pull/8) Loudspeaker, a clip-on microphone and shorter read-backs |
+| [009-no-command-on-a-fragment.md](009-no-command-on-a-fragment.md) | [#9](https://github.com/kineticsystem/stepit-speech/pull/9) No command without confirmation on a fragment |
 
 ## How to Write One
 

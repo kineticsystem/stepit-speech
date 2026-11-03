@@ -15,6 +15,7 @@ from voicebridge.conversation.prompt import AWAITING_CONFIRMATION
 from voicebridge.conversation.session import (
     CANCELLED,
     MUTED_CALL,
+    NOT_ASKED,
     NOTHING_TO_CONFIRM,
     ONE_AT_A_TIME,
     READ_BACK_FAILED,
@@ -94,6 +95,11 @@ class Harness:
     async def user_says(self, text: str) -> None:
         await self.server({"type": "input_audio_buffer.speech_started"},
                           {"type": USER_TRANSCRIPT, "item_id": "item_user", "transcript": text})
+
+    async def user_types(self, text: str) -> None:
+        """A message the user typed in the page, which skips speech-to-text and the stop words."""
+        await self.session.from_browser({"type": "conversation.item.create", "item": {
+            "type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}})
 
     async def server_replies_itself(self, text: str = "Okay!") -> str:
         """The speech server's own reply to the user's turn, which nobody asked for."""
@@ -346,6 +352,7 @@ async def test_arguments_that_are_not_json_are_rejected(harness):
 
 
 async def test_a_command_without_confirmation_runs_at_once(harness):
+    await harness.user_types("halt the arm")
     rid = await harness.llm_calls("halt", {})
     assert harness.robot.targets == ["/arm/halt"], "it runs before the LLM's response is over"
     await harness.response_done(rid)
@@ -355,6 +362,7 @@ async def test_a_command_without_confirmation_runs_at_once(harness):
 
 async def test_a_failure_is_said(harness):
     harness.robot.outcomes["/arm/halt"] = Outcome(False, "the motors are off")
+    await harness.user_types("halt the arm")
     rid = await harness.llm_calls("halt", {})
     await harness.response_done(rid)
     assert harness.said() == ["That did not work: the motors are off."]
@@ -362,10 +370,36 @@ async def test_a_failure_is_said(harness):
 
 async def test_a_query_reads_and_answers(harness):
     harness.robot.outcomes["/arm/state"] = Outcome(True, "", {"angle": 30.0})
+    await harness.user_types("where is it now?")
     rid = await harness.llm_calls("where", {})
     await harness.response_done(rid)
     assert harness.robot.targets == ["/arm/state"]
     assert harness.said() == ["The joint is at 30 degrees."]
+
+
+@pytest.mark.parametrize(("heard", "command"), [
+    (None, "halt"),
+    ("Three degrees.", "halt"),
+    ("Three degrees.", "where"),
+    ("turn it", "where"),
+])
+async def test_a_command_without_confirmation_runs_only_when_the_user_asked_for_it(harness, heard, command):
+    # "Three centimetres.", said to correct a read-back, once made the LLM call stop.
+    if heard is not None:
+        await harness.user_says(heard)
+    rid = await harness.llm_calls(command, {})
+    await harness.response_done(rid)
+    assert harness.robot.requests == []
+    assert harness.outputs() == [NOT_ASKED.format(name=command)]
+    assert harness.said() == []
+
+
+async def test_a_spoken_request_asks_for_a_command_without_confirmation(harness):
+    harness.robot.outcomes["/arm/state"] = Outcome(True, "", {"angle": 30.0})
+    await harness.user_says("Where is the joint?")
+    rid = await harness.llm_calls("where", {})
+    await harness.response_done(rid)
+    assert harness.robot.targets == ["/arm/state"]
 
 
 async def test_one_command_per_response(harness):
