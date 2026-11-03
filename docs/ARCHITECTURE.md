@@ -350,7 +350,7 @@ The proxy removes the tools from the request, lists the commands in the instruct
 
 ```json
 {"oneOf": [
-  {"properties": {"command": {"const": "move_camera"}, "arguments": {"properties": {"millimetres": {"type": "number"}, "direction": {"enum": ["closer", "farther"]}}}}},
+  {"properties": {"command": {"const": "move_camera"}, "arguments": {"properties": {"distance": {"type": "number"}, "unit": {"enum": ["millimetres", "centimetres"]}, "direction": {"enum": ["closer", "farther"]}}}}},
   {"properties": {"command": {"const": "take_test_shot"}, "arguments": {}}},
   {"properties": {"reply": {"type": "string", "maxLength": 200}}}
 ]}
