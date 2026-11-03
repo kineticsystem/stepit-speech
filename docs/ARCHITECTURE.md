@@ -107,6 +107,7 @@ The bridge exists for these rules. Each one is code, not a request to the LLM, a
 12. **The LLM cannot pretend.** Every turn it answers with a command or a reply, in a JSON schema its server enforces, so a command cannot hide in words. A reply that asks to confirm, or says the robot is acting, is asked again with commands only. See [The LLM Proxy](#the-llm-proxy).
 13. **Yes, no and stop never reach the LLM.** A yes with no command waiting is answered by the bridge: "There is no command waiting for confirmation, so nothing was done."
 14. **Asleep, the voice hears nothing but stop and the wake phrase.** Every other turn is muted and cancelled, and never reaches the LLM; only a wake phrase, as the last sentence we said, wakes it. See [Sleeping and Waking](#sleeping-and-waking).
+15. **A command without confirmation needs our words.** The stop command and the queries run as soon as the LLM calls them, with no read-back to catch a guess. So the bridge runs one only when our last words share a word with it, from its name or its examples, or a stop phrase for the stop command; "what", "is", "the" and the other common words do not count, in [`safety/asked.py`](../src/voicebridge/safety/asked.py). Otherwise the LLM is told it was not asked for, and asks us what we want. "Three centimetres", said to correct a read-back, once made the LLM call stop.
 
 ### The Confirmation, as a State Machine
 
@@ -124,6 +125,7 @@ Every way out of `Armed` goes back to `Idle`, so a command is confirmed once at 
 | The STT mishears "fifteen" as "fifty". | The read-back says "50 degrees": we hear it and say no. |
 | The LLM picks the wrong direction, or guesses one we did not say. | The read-back says the direction in words: we hear it and say no. Measured on Qwen3.8-27B: "turn the table 20 degrees" became clockwise. |
 | The LLM asks for 400 degrees, or 2 metres. | The limits of the parameter: the command is refused before the read-back. |
+| The LLM calls stop, or a query, on a fragment, e.g. "Three centimetres." | Rule 15: none of the command's words is in what we said, so it does not run. |
 | The LLM calls a tool while we only chat. | The read-back: an unexpected "Rotating..." is answered with no, or with anything else. |
 | The LLM answers "I'll switch the lights on for you" and calls nothing. | The JSON schema: an answer is a command or a reply. A reply with a verb of the robot's read-backs, e.g. "switching", is asked again with commands only; if no command comes, the voice says "Sorry, I did not get that as a command." |
 | The LLM asks "Switching the lights on. Confirm?" itself, and our yes confirms nothing. | The proxy refuses a reply that asks to confirm, and the model never sees the bridge's read-backs to copy. A yes with nothing waiting is answered by the bridge. |
@@ -185,13 +187,13 @@ The loader, in [`robotfile/loader.py`](../src/voicebridge/robotfile/loader.py), 
 | `parameters` | no | What the LLM fills in. `[a, b]` is a choice of words; `number`, `integer`, `string` or `boolean` a value; the long form `{type, min, max, description, optional}` adds limits. The LLM sees them as the JSON schema of the tool; the bridge checks them again, as the LLM may ignore a schema. |
 | `say` | yes | The sentence read back, or, for a query, the answer. |
 | `run` | no | The call to run, and its values. A command without `run` is a query: it reads, says, and changes nothing. |
-| `confirm` | no | `true` by default. `false` runs the command at once: only for `stop`, and for queries, which must say so. |
+| `confirm` | no | `true` by default. `false` runs the command at once: only for `stop`, and for queries, which must say so. It runs only when our words share a word with its name or its examples (rule 15). |
 | `read` | no | Calls to run before the read-back, e.g. the plan of the stack. Their results are `reads.<name>`. |
 | `let` | no | Values computed from the parameters and the reads, in order, e.g. `shots` from `reads.plan`. |
 | `require` | no | Conditions that must hold, each with the sentence that refuses the command, e.g. `Mark the near end first.` |
 | `started` | no | What to say as soon as the command is confirmed, for a long one: "The focus stack has started." |
 | `done`, `failed` | no | What to say once it ended; `failed` sees `{{ message }}`, the robot's reason. Without them: "Done." and "That did not work: <reason>." |
-| `examples` | no, but expected | Phrases and the arguments the LLM should give for them. The LLM sees the first four in the tool; `voicebridge check`, the tests and `commands.md` prepare every one; `voicebridge eval` scores the LLM on them. |
+| `examples` | no, but expected | Phrases and the arguments the LLM should give for them. For a command with `confirm: false`, their words, with its name's, are the words that ask for it. The LLM sees the first four in the tool; `voicebridge check`, the tests and `commands.md` prepare every one; `voicebridge eval` scores the LLM on them. |
 
 `Planner.prepare` uses the keys in this order: check the arguments, run the reads, compute the lets, check the requires, render `say` and `run`. Anything that refuses a command happens before the read-back, so the user never confirms a command that would be refused.
 
@@ -245,7 +247,7 @@ The package is split by what each part does, in six packages and two single modu
 | `conversation` | The WebSocket bridge between the browser and the speech server, and the session that holds the safety rules. | Decide yes with the LLM; talk to rosbridge itself. |
 | `llmproxy` | The speech server's LLM: the bridge's sentences said without the model, one JSON decision per turn, what the model never sees. | Run a command, or decide a yes. |
 | `scripted` | The tags around a sentence of the bridge: the one contract between `conversation` and `llmproxy`. | Import anything of voicebridge. |
-| `safety` | Yes, no, stop or anything else, from fixed lists of words; the state machine of the pending command. | Ask the LLM, do I/O, or read a clock of its own. |
+| `safety` | Yes, no, stop or anything else, from fixed lists of words; whether our words ask for a command without confirmation; the state machine of the pending command. | Ask the LLM, do I/O, or read a clock of its own. |
 | `robot` | From a tool call to a prepared command, and from a request to the robot's outcome, through rosbridge. | Know a robot's names. |
 | `robotfile` | The robot file: its model, its loader and checks, its templates, the calls of standard ROS 2 interfaces. | Do I/O beyond reading the file. |
 
@@ -276,6 +278,7 @@ The modules, part by part:
 | | `chat` | Pure functions on the messages of chat completions. |
 | `scripted` | `scripted` | `exact_speech` and `scripted_sentence`. |
 | `safety` | `phrases` | Yes, no, stop or other. |
+| | `asked` | Whether our words ask for a command that runs without confirmation. |
 | | `confirmation` | The state machine of the pending command. |
 | `robot` | `planner` | From a tool call to a `Prepared` command: checks, reads, read-back and request. |
 | | `request` | `Request`, `Outcome`, `render_request`, `judge`, and the `Robot` port. |
@@ -400,6 +403,7 @@ There is no second thread because there is no rclpy: a ROS 2 node would need its
 | `test_session.py` | Every safety rule: the read-back and the yes, no, anything else, a late yes, a yes over the read-back, a wrong or interrupted read-back, stop alone and inside a sentence, stop over the bridge's own speech, rejected arguments, commands without confirmation, queries, one command per answer, a busy server, the muted reply and a call inside it, a yes with nothing waiting, the greeting, closing during a command; the sleep command confirmed or declined, every turn muted while asleep, stop while asleep, only the exact wake phrase waking it, the state told to the client. |
 | `test_llmproxy.py` | The proxy against a fake LLM: the bridge's sentences said without the model, the summary of older turns written without the model and kept out of the history, the JSON schema and its decisions, a pretended action or read-back asked again, yes, no and stop kept from the model, the history without the bridge's sentences, the skipped follow-up, the chosen model, pass-through; the sleep state from the history, a sleeping turn kept from the model, the history without the sleeping turns. |
 | `test_confirmation.py` | The state machine, with a fake clock. |
+| `test_asked.py` | The words that ask for stop and for the queries of StepIt Macro, and the fragments that ask for nothing, e.g. "Three centimeter.", "Can you". |
 | `test_phrases.py` | What counts as yes, no and stop, and what does not, e.g. "yes but 20 degrees", "right"; the wake phrase said alone, and with anything else. |
 | `test_catalogue.py` | The robot file: short forms, the tool of the LLM, the check of arguments, the sleep section, and each mistake the loader finds. |
 | `test_templating.py` | Typed results, the filters, the sandbox, undefined names. |
