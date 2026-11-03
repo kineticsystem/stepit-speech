@@ -28,6 +28,7 @@ robot:
     - Left is counter-clockwise, right is clockwise.
     - "the camera", "the rail" or "the focus", when moving: the rail. Closer, forward or in is toward the subject;
       back, away, farther or out is away from it.
+    - A distance is the number and the unit the user said, "mm" millimetres and "cm" centimetres: never convert it.
     - "a stack", "a focus stack" or "a shoot": a focus stack. "A test shot", "a test picture" or "a photo": a test shot.
     - "f 8" or "f/8" is the aperture 8; "one over 125" or "a 125th" is the shutter speed 1/125.
 
@@ -119,22 +120,33 @@ commands:
       - rotate the subject right 2.5 degrees: {degrees: 2.5, direction: clockwise}
 
   move_camera:
-    description: Moves the camera along the rail, closer to the subject or farther from it, by a distance.
+    description: >-
+      Moves the camera along the rail, closer to the subject or farther from it, by a distance in the unit the
+      user said: millimetres or centimetres, never converted.
     parameters:
-      millimetres: {type: number, min: 0.01, max: 50, description: "how far to move, in millimetres"}
+      distance: {type: number, min: 0.01, max: 50, description: "how far to move, the number the user said"}
+      unit: [millimetres, centimetres]
       direction: [closer, farther]
-    # Only the camera moves along the rail: "Moving" is enough.
-    say: Moving {{ direction }} {{ millimetres | plural('millimetre') }}.
+    # The LLM copies the number and the unit, and the conversion is ours: Bonsai turned
+    # "uh one centimetre" into 1 millimetre 8 times in 20, never "two" or "three centimetres".
+    let:
+      millimetres: "{{ (distance * 10 if unit == 'centimetres' else distance) | round(3) }}"
+    require:
+      - "millimetres <= 50": At most 50 millimetres at a time, 5 centimetres.
+    # Only the camera moves along the rail: "Moving" is enough. The read-back says the user's own unit.
+    say: Moving {{ direction }} {{ distance | plural(unit[:-1]) }}.
     run:
       objective:
         name: MoveRailBy
         # Toward the subject is negative on the rig.
         payload: {mm: "{{ -millimetres if direction == 'closer' else millimetres }}"}
-    done: Moved {{ direction }} {{ millimetres | plural('millimetre') }}.
+    done: Moved {{ direction }} {{ distance | plural(unit[:-1]) }}.
     examples:
-      - move the camera closer by 1 mm: {millimetres: 1, direction: closer}
-      - move the rail back half a millimetre: {millimetres: 0.5, direction: farther}
-      - focus 2 millimetres further away: {millimetres: 2, direction: farther}
+      - move the camera closer by 1 mm: {distance: 1, unit: millimetres, direction: closer}
+      - move the camera back one centimetre: {distance: 1, unit: centimetres, direction: farther}
+      - move the rail back half a millimetre: {distance: 0.5, unit: millimetres, direction: farther}
+      - focus 2 centimetres further away: {distance: 2, unit: centimetres, direction: farther}
+      - move closer 1.5 cm: {distance: 1.5, unit: centimetres, direction: closer}
 
   go_to_mark:
     description: Moves the camera back to the near or the far mark of the focus stack, to check the focus there.

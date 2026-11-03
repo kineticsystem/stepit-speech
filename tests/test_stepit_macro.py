@@ -43,9 +43,29 @@ async def test_left_is_counter_clockwise_and_negative(stepit_macro):
 
 
 async def test_closer_is_toward_the_subject_and_negative(stepit_macro):
-    sentence, goal = await objective(stepit_macro, "move_camera", {"millimetres": 1, "direction": "closer"})
+    sentence, goal = await objective(stepit_macro, "move_camera",
+                                     {"distance": 1, "unit": "millimetres", "direction": "closer"})
     assert sentence == "Moving closer 1 millimetre."
     assert goal == {"target_tree": "MoveRailBy", "payload": "{mm: -1.0}"}
+
+
+@pytest.mark.parametrize(("distance", "said", "mm"), [
+    (1, "1 centimetre", "10.0"),
+    (2.5, "2.5 centimetres", "25.0"),
+    (0.3, "0.3 centimetres", "3.0"),
+    (5, "5 centimetres", "50.0"),
+])
+async def test_centimetres_are_read_back_as_said_and_run_in_millimetres(stepit_macro, distance, said, mm):
+    sentence, goal = await objective(stepit_macro, "move_camera",
+                                     {"distance": distance, "unit": "centimetres", "direction": "farther"})
+    assert sentence == f"Moving farther {said}."
+    assert goal == {"target_tree": "MoveRailBy", "payload": f"{{mm: {mm}}}"}
+
+
+async def test_the_limit_holds_after_the_conversion(stepit_macro):
+    with pytest.raises(Rejected, match="At most 50 millimetres"):
+        await Planner(stepit_macro, None).prepare(
+            "move_camera", {"distance": 6, "unit": "centimetres", "direction": "farther"})
 
 
 async def test_a_test_shot(stepit_macro):
