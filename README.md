@@ -247,7 +247,7 @@ To add one:
 3. Check it, without the robot: `voicebridge check robots/stepit-macro/robot.yaml` prepares every example and prints its read-back and its request, or says what is wrong and where, e.g. `commands.rotate_stage.say: unknown name degres; the names are degrees, direction, reads`.
 4. Regenerate `commands.md`, as above, and restart the bridge.
 
-A command that only answers a question, e.g. `report_status`, has no `run` and says `confirm: false`. A command that reads the robot before it is read back, e.g. `start_full_stack`, which reads the plan of the stack, has a `read`; `let` computes values from it, and `require` refuses the command with a sentence, e.g. "Mark the near end first." The [architecture document](docs/ARCHITECTURE.md#the-robot-file) describes every key.
+A command that only answers a question, e.g. `report_status`, has no `run` and says `confirm: false`. A command that reads the robot before it is read back, e.g. `start_full_stack`, which reads the plan of the stack, has a `read`; `let` computes values from it, and `require` refuses the command with a sentence, e.g. "Set the farther mark first." The [architecture document](docs/ARCHITECTURE.md#the-robot-file) describes every key.
 
 > [!NOTE]
 > In YAML, a text with a comma inside `{ }` must be in quotes: `{description: "how far, in degrees"}`. The check says so when we forget.

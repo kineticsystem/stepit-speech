@@ -29,6 +29,8 @@ robot:
     - "the camera", "the rail" or "the focus", when moving: the rail. Closer, forward or in is toward the subject;
       back, away, farther or out is away from it.
     - A distance is the number and the unit the user said, "mm" millimetres and "cm" centimetres: never convert it.
+    - The marks of a stack are named by where the camera is: "near", "close" or "closer" is the closer mark, with
+      the camera close to the subject; "far", "further" or "farther" is the farther mark, with the camera far from it.
     - "A shot", "another shot", "a test shot", "a test picture" or "a photo": a test shot, never a stack.
     - "A stack" or "one stack": one focus stack, where the stage stands. "A full stack", "a stack session", "a 3D
       stack" or "every angle": the full stack, at every angle of the plan.
@@ -151,18 +153,21 @@ commands:
       - move closer 1.5 cm: {distance: 1.5, unit: centimetres, direction: closer}
 
   go_to_mark:
-    description: Moves the camera back to the near or the far mark of the focus stack, to check the focus there.
+    description: >-
+      Moves the camera back to a mark of the focus stack, to check the focus there: the closer mark, where the
+      camera is closest to the subject, or the farther mark, where it is farthest.
     parameters:
-      mark: [near, far]
+      mark: [closer, farther]
     say: Going to the {{ mark }} mark.
     run:
       objective:
         name: MoveRailToMark
-        payload: {mark: "{{ mark }}"}
+        # The rig names the marks after the part of the subject in focus: the camera closer is its far end.
+        payload: {mark: "{{ 'far' if mark == 'closer' else 'near' }}"}
     done: The camera is at the {{ mark }} mark.
     examples:
-      - go to the near mark: {mark: near}
-      - move the camera back to the far end: {mark: far}
+      - go to the closer mark: {mark: closer}
+      - move the camera back to the far mark: {mark: farther}
 
   manual_drive:
     description: >-
@@ -197,26 +202,29 @@ commands:
 
   mark:
     description: >-
-      Marks where the camera is now as the near or the far end of the focus stack: the near end is the
-      closest part of the subject in focus, the far end the farthest.
+      Marks where the camera is now as an end of the focus stack: the closer mark, with the camera closest to the
+      subject, or the farther mark, with the camera farthest from it. A stack runs from the farther mark to the
+      closer one.
     parameters:
-      end: [near, far]
-    say: Marking the {{ end }} end.
+      end: [closer, farther]
+    say: Marking the {{ end }} mark.
     run:
       objective:
-        name: "{{ 'MarkNear' if end == 'near' else 'MarkFar' }}"
-    done: The {{ end }} end is marked.
+        # The rig names the marks after the part of the subject in focus: the camera closer is its far end.
+        name: "{{ 'MarkFar' if end == 'closer' else 'MarkNear' }}"
+    done: The {{ end }} mark is set.
     examples:
-      - mark the near end: {end: near}
-      - this is the far point: {end: far}
-      - set the near mark here: {end: near}
+      - mark the closer position: {end: closer}
+      - this is the far point: {end: farther}
+      - set the near mark here: {end: closer}
+      - mark the farther end: {end: farther}
 
   set_stack:
     description: >-
-      Changes the plan of the focus stack: the shots from the near end to the far one, the angles of the
+      Changes the plan of the focus stack: the shots from one mark to the other, the angles of the
       stage, and how far the stage turns either way. Give only what changes.
     parameters:
-      shots: {type: integer, min: 1, max: 500, optional: true, description: "shots from the near end to the far one"}
+      shots: {type: integer, min: 1, max: 500, optional: true, description: "shots from one mark to the other"}
       angles: {type: integer, min: 1, max: 360, optional: true, description: "angles of the stage"}
       turn: {type: number, min: 0, max: 180, optional: true,
              description: "how far the stage turns either way, in degrees, e.g. 17 for -17 to 17"}
@@ -253,8 +261,8 @@ commands:
     let:
       shots: "{{ reads.plan['state.shots'] | scalar | int }}"
     require:
-      - "reads.plan['state.near'] | scalar is not none": Mark the near end first.
-      - "reads.plan['state.far'] | scalar is not none": Mark the far end first.
+      - "reads.plan['state.near'] | scalar is not none": Set the farther mark first.
+      - "reads.plan['state.far'] | scalar is not none": Set the closer mark first.
     say: "Stacking {{ shots }} shots at this angle."
     run:
       objective:
@@ -289,8 +297,8 @@ commands:
       # One angle is where the stage stands, whatever the turn.
       turn: "{{ 0.0 if (reads.plan['state.angles'] | scalar | int) == 1 else reads.plan['state.turn'] | scalar | float }}"
     require:
-      - "reads.plan['state.near'] | scalar is not none": Mark the near end first.
-      - "reads.plan['state.far'] | scalar is not none": Mark the far end first.
+      - "reads.plan['state.near'] | scalar is not none": Set the farther mark first.
+      - "reads.plan['state.far'] | scalar is not none": Set the closer mark first.
     say: >-
       Stacking {{ shots }} shots at {{ angles }} {{ 'angle' if angles == 1 else 'angles' }}
       {%- if angles > 1 %}, plus or minus {{ turn | plural('degree') }}{% endif %}: {{ shots * angles }} pictures.
@@ -327,13 +335,14 @@ commands:
       shots: "{{ reads.plan['state.shots'] | scalar | int }}"
       angles: "{{ reads.plan['state.angles'] | scalar | int }}"
       turn: "{{ reads.plan['state.turn'] | scalar | float }}"
+      # The rig's near end is the camera's farther mark, its far end the closer one.
       near: "{{ reads.plan['state.near'] | scalar is not none }}"
       far: "{{ reads.plan['state.far'] | scalar is not none }}"
     say: >-
       The stack is {{ shots }} shots at {{ angles }} {{ 'angle' if angles == 1 else 'angles' }}
       {%- if angles > 1 %}, from minus {{ turn }} to {{ turn }} degrees{% endif %}: {{ shots * angles }} pictures.
-      {% if near and far %}Both ends are marked.{% elif near %}The near end is marked, the far end is not.
-      {%- elif far %}The far end is marked, the near end is not.{% else %}No end is marked yet.{% endif %}
+      {% if near and far %}Both marks are set.{% elif near %}The farther mark is set, the closer one is not.
+      {%- elif far %}The closer mark is set, the farther one is not.{% else %}No mark is set yet.{% endif %}
     examples:
       - say: what is the plan of the stack
         expect: {}

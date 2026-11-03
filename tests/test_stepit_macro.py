@@ -98,12 +98,27 @@ async def test_one_stack_is_where_the_stage_stands_whatever_the_plan(stepit_macr
 
 
 @pytest.mark.parametrize("command", ["start_stack", "start_full_stack"])
-@pytest.mark.parametrize("missing, complaint", [("state.near", "near end"), ("state.far", "far end")])
+@pytest.mark.parametrize("missing, complaint", [("state.near", "farther mark"), ("state.far", "closer mark")])
 async def test_a_focus_stack_needs_both_marks(stepit_macro, command, missing, complaint):
     plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
             "state.far": [2.0], missing: []}
     with pytest.raises(Rejected, match=complaint):
         await Planner(stepit_macro, None).prepare(command, {}, reads={"plan": plan})
+
+
+@pytest.mark.parametrize(("end", "objective_name"), [("closer", "MarkFar"), ("farther", "MarkNear")])
+async def test_the_marks_are_named_by_where_the_camera_is(stepit_macro, end, objective_name):
+    # The rig names its ends after the part of the subject in focus: with the camera closer, its back, the far end.
+    sentence, goal = await objective(stepit_macro, "mark", {"end": end})
+    assert sentence == f"Marking the {end} mark."
+    assert goal["target_tree"] == objective_name
+
+
+@pytest.mark.parametrize(("mark", "rig_mark"), [("closer", "far"), ("farther", "near")])
+async def test_going_to_a_mark_uses_the_rigs_name(stepit_macro, mark, rig_mark):
+    sentence, goal = await objective(stepit_macro, "go_to_mark", {"mark": mark})
+    assert sentence == f"Going to the {mark} mark."
+    assert goal == {"target_tree": "MoveRailToMark", "payload": f"{{mark: {rig_mark}}}"}
 
 
 async def test_set_stack_needs_something_to_change(stepit_macro):

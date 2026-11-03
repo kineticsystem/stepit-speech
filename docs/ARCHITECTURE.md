@@ -190,7 +190,7 @@ The loader, in [`robotfile/loader.py`](../src/voicebridge/robotfile/loader.py), 
 | `confirm` | no | `true` by default. `false` runs the command at once: only for `stop`, and for queries, which must say so. It runs only when our words share a word with its name or its examples (rule 15). |
 | `read` | no | Calls to run before the read-back, e.g. the plan of the stack. Their results are `reads.<name>`. |
 | `let` | no | Values computed from the parameters and the reads, in order, e.g. `shots` from `reads.plan`. |
-| `require` | no | Conditions that must hold, each with the sentence that refuses the command, e.g. `Mark the near end first.` |
+| `require` | no | Conditions that must hold, each with the sentence that refuses the command, e.g. `Set the farther mark first.` |
 | `started` | no | What to say as soon as the command is confirmed, for a long one: "The focus stack has started." |
 | `done`, `failed` | no | What to say once it ended; `failed` sees `{{ message }}`, the robot's reason. Without them: "Done." and "That did not work: <reason>." |
 | `examples` | no, but expected | Phrases and the arguments the LLM should give for them. For a command with `confirm: false`, their words, with its name's, are the words that ask for it. The LLM sees the first four in the tool; `voicebridge check`, the tests and `commands.md` prepare every one; `voicebridge eval` scores the LLM on them. |
