@@ -18,6 +18,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [010-distance-unit.md](010-distance-unit.md) | [#10](https://github.com/kineticsystem/stepit-speech/pull/10) The camera's distance in the user's unit |
 | [011-rosbridge-first-connect.md](011-rosbridge-first-connect.md) | [#11](https://github.com/kineticsystem/stepit-speech/pull/11) Connected to rosbridge before the first command |
 | [012-shots-and-stacks.md](012-shots-and-stacks.md) | [#12](https://github.com/kineticsystem/stepit-speech/pull/12) A shot, a stack and a full stack |
+| [013-marks-by-camera.md](013-marks-by-camera.md) | [#13](https://github.com/kineticsystem/stepit-speech/pull/13) The marks named by where the camera is |
 
 ## How to Write One
 

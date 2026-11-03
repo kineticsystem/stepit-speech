@@ -61,11 +61,11 @@ The voice can sleep, so that we talk to others without it hearing a command:
 |---|---|---|
 | [`rotate_stage`](#rotate_stage) | Turns the rotary stage, the turntable the subject stands on, by an angle. | yes |
 | [`move_camera`](#move_camera) | Moves the camera along the rail, closer to the subject or farther from it, by a distance in the unit the user said: millimetres or centimetres, never converted. | yes |
-| [`go_to_mark`](#go_to_mark) | Moves the camera back to the near or the far mark of the focus stack, to check the focus there. | yes |
+| [`go_to_mark`](#go_to_mark) | Moves the camera back to a mark of the focus stack, to check the focus there: the closer mark, where the camera is closest to the subject, or the farther mark, where it is farthest. | yes |
 | [`manual_drive`](#manual_drive) | Enables teleoperation (on), so that the rig is driven by hand, with the gamepad or the sliders, or disables it (off), to take the rig back for the commands. | yes |
 | [`stop`](#stop) | Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop. | no, it runs at once |
-| [`mark`](#mark) | Marks where the camera is now as the near or the far end of the focus stack: the near end is the closest part of the subject in focus, the far end the farthest. | yes |
-| [`set_stack`](#set_stack) | Changes the plan of the focus stack: the shots from the near end to the far one, the angles of the stage, and how far the stage turns either way. Give only what changes. | yes |
+| [`mark`](#mark) | Marks where the camera is now as an end of the focus stack: the closer mark, with the camera closest to the subject, or the farther mark, with the camera farthest from it. A stack runs from the farther mark to the closer one. | yes |
+| [`set_stack`](#set_stack) | Changes the plan of the focus stack: the shots from one mark to the other, the angles of the stage, and how far the stage turns either way. Give only what changes. | yes |
 | [`start_stack`](#start_stack) | Shoots one focus stack, at the angle where the stage stands now, with the shots of the plan and the marks the rig holds. The stage does not turn. | yes |
 | [`start_full_stack`](#start_full_stack) | Starts the full focus stack, the 3D one: a stack at every angle of the plan, turning the stage, with the marks the rig holds. | yes |
 | [`describe_stack`](#describe_stack) | Says the plan of the focus stack and which ends are marked. Changes nothing. | no, it changes nothing |
@@ -252,34 +252,15 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
 
 ### go_to_mark
 
-Moves the camera back to the near or the far mark of the focus stack, to check the focus there.
+Moves the camera back to a mark of the focus stack, to check the focus there: the closer mark, where the camera is closest to the subject, or the farther mark, where it is farthest.
 
 | Parameter | Values | Description |
 |---|---|---|
-| `mark` | `near`, `far` |  |
+| `mark` | `closer`, `farther` |  |
 
-**"go to the near mark"** becomes `go_to_mark(mark: 'near')`.
+**"go to the closer mark"** becomes `go_to_mark(mark: 'closer')`.
 
-- It reads back: "Going to the near mark. Confirm?"
-- It sends to rosbridge:
-
-  ```json
-  {
-    "op": "send_action_goal",
-    "action": "/commander/execute_objective",
-    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
-    "args": {
-      "target_tree": "MoveRailToMark",
-      "payload": "{mark: near}"
-    }
-  }
-  ```
-
-- When it is done: "The camera is at the near mark."
-
-**"move the camera back to the far end"** becomes `go_to_mark(mark: 'far')`.
-
-- It reads back: "Going to the far mark. Confirm?"
+- It reads back: "Going to the closer mark. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -294,7 +275,26 @@ Moves the camera back to the near or the far mark of the focus stack, to check t
   }
   ```
 
-- When it is done: "The camera is at the far mark."
+- When it is done: "The camera is at the closer mark."
+
+**"move the camera back to the far mark"** becomes `go_to_mark(mark: 'farther')`.
+
+- It reads back: "Going to the farther mark. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "MoveRailToMark",
+      "payload": "{mark: near}"
+    }
+  }
+  ```
+
+- When it is done: "The camera is at the farther mark."
 
 ### manual_drive
 
@@ -418,34 +418,15 @@ Stops whatever the rig is doing, at once. The rig also stops whenever the user s
 
 ### mark
 
-Marks where the camera is now as the near or the far end of the focus stack: the near end is the closest part of the subject in focus, the far end the farthest.
+Marks where the camera is now as an end of the focus stack: the closer mark, with the camera closest to the subject, or the farther mark, with the camera farthest from it. A stack runs from the farther mark to the closer one.
 
 | Parameter | Values | Description |
 |---|---|---|
-| `end` | `near`, `far` |  |
+| `end` | `closer`, `farther` |  |
 
-**"mark the near end"** becomes `mark(end: 'near')`.
+**"mark the closer position"** becomes `mark(end: 'closer')`.
 
-- It reads back: "Marking the near end. Confirm?"
-- It sends to rosbridge:
-
-  ```json
-  {
-    "op": "send_action_goal",
-    "action": "/commander/execute_objective",
-    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
-    "args": {
-      "target_tree": "MarkNear",
-      "payload": ""
-    }
-  }
-  ```
-
-- When it is done: "The near end is marked."
-
-**"this is the far point"** becomes `mark(end: 'far')`.
-
-- It reads back: "Marking the far end. Confirm?"
+- It reads back: "Marking the closer mark. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -460,11 +441,11 @@ Marks where the camera is now as the near or the far end of the focus stack: the
   }
   ```
 
-- When it is done: "The far end is marked."
+- When it is done: "The closer mark is set."
 
-**"set the near mark here"** becomes `mark(end: 'near')`.
+**"this is the far point"** becomes `mark(end: 'farther')`.
 
-- It reads back: "Marking the near end. Confirm?"
+- It reads back: "Marking the farther mark. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -479,15 +460,53 @@ Marks where the camera is now as the near or the far end of the focus stack: the
   }
   ```
 
-- When it is done: "The near end is marked."
+- When it is done: "The farther mark is set."
+
+**"set the near mark here"** becomes `mark(end: 'closer')`.
+
+- It reads back: "Marking the closer mark. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "MarkFar",
+      "payload": ""
+    }
+  }
+  ```
+
+- When it is done: "The closer mark is set."
+
+**"mark the farther end"** becomes `mark(end: 'farther')`.
+
+- It reads back: "Marking the farther mark. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "MarkNear",
+      "payload": ""
+    }
+  }
+  ```
+
+- When it is done: "The farther mark is set."
 
 ### set_stack
 
-Changes the plan of the focus stack: the shots from the near end to the far one, the angles of the stage, and how far the stage turns either way. Give only what changes.
+Changes the plan of the focus stack: the shots from one mark to the other, the angles of the stage, and how far the stage turns either way. Give only what changes.
 
 | Parameter | Values | Description |
 |---|---|---|
-| `shots` | 1 to 500 | shots from the near end to the far one Optional. |
+| `shots` | 1 to 500 | shots from one mark to the other Optional. |
 | `angles` | 1 to 360 | angles of the stage Optional. |
 | `turn` | 0 to 180 | how far the stage turns either way, in degrees, e.g. 17 for -17 to 17 Optional. |
 
@@ -708,7 +727,7 @@ It first reads the robot: `plan` with `get_parameters`.
 
 **"what is the plan of the stack"** becomes `describe_stack()`.
 
-- It answers: "The stack is 10 shots at 35 angles, from minus 17 to 17 degrees: 350 pictures. The near end is marked, the far end is not."
+- It answers: "The stack is 10 shots at 35 angles, from minus 17 to 17 degrees: 350 pictures. The farther mark is set, the closer one is not."
 
 ### take_test_shot
 
