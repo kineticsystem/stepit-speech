@@ -49,7 +49,7 @@ class VoiceService : Service() {
         super.onCreate()
         // Pings find a dead Wi-Fi in seconds; without them a socket can stay open on nothing for minutes.
         val http = OkHttpClient.Builder().pingInterval(10, TimeUnit.SECONDS).build()
-        client = VoiceClient(http, AndroidMicrophone(), AndroidSpeaker(), scheduler, published = mutableState)
+        client = VoiceClient(http, AndroidMicrophone(this), AndroidSpeaker(this), scheduler, published = mutableState)
         route = HeadsetRoute(this)
     }
 

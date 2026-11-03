@@ -10,7 +10,14 @@ import android.os.Build
 
 /**
  * Puts the phone in call mode while the voice runs, and sends the audio to
- * the headset.
+ * the headset, or to the loudspeaker without one.
+ *
+ * Call mode keeps the echo canceller on. Without a headset it would play the
+ * voice in the earpiece, useless in a pocket or on a table: the loudspeaker is
+ * chosen instead, as the speaker button of a call does.
+ *
+ * With a USB microphone ([UsbMicrophone]) the phone stays out of call mode, so
+ * that Android records from it: the voice plays on the loudspeaker as media.
  *
  * In call mode a wired or USB-C headset is chosen on its own. A Bluetooth
  * headset needs its hands-free link, SCO, which switches its microphone to 8
@@ -22,17 +29,26 @@ class HeadsetRoute(context: Context) {
     private val audio = context.getSystemService(AudioManager::class.java)
     private var previousMode = AudioManager.MODE_NORMAL
     private var sco = false
+    private var speakerphone = false
+    private var callMode = false
 
-    /** The headset in use, for the screen; "phone" without one. */
+    /** The headset in use, for the screen; "loudspeaker" without one. */
     var device: String = "phone"
         private set
 
     fun start() {
+        val usb = UsbMicrophone.find(audio)
+        if (usb != null) {
+            device = "${name(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)}, ${usb.productName}"
+            return
+        }
+        callMode = true
         previousMode = audio.mode
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val available = audio.availableCommunicationDevices
-            val chosen = PREFERENCE.firstNotNullOfOrNull { type -> available.firstOrNull { it.type == type } }
+            val chosen = (PREFERENCE + AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+                .firstNotNullOfOrNull { type -> available.firstOrNull { it.type == type } }
             if (chosen != null) {
                 audio.setCommunicationDevice(chosen)
                 device = name(chosen.type)
@@ -49,11 +65,21 @@ class HeadsetRoute(context: Context) {
                 audio.isBluetoothScoOn = true
                 sco = true
                 device = name(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+            } else {
+                @Suppress("DEPRECATION")
+                audio.isSpeakerphoneOn = true
+                speakerphone = true
+                device = name(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
             }
         }
     }
 
     fun stop() {
+        if (!callMode) {
+            device = "phone"
+            return
+        }
+        callMode = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             audio.clearCommunicationDevice()
         } else if (sco) {
@@ -62,6 +88,10 @@ class HeadsetRoute(context: Context) {
             @Suppress("DEPRECATION")
             audio.stopBluetoothSco()
             sco = false
+        } else if (speakerphone) {
+            @Suppress("DEPRECATION")
+            audio.isSpeakerphoneOn = false
+            speakerphone = false
         }
         audio.mode = previousMode
         device = "phone"
@@ -72,6 +102,7 @@ class HeadsetRoute(context: Context) {
         AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired headphones"
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth headset"
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "loudspeaker"
         else -> "phone"
     }
 

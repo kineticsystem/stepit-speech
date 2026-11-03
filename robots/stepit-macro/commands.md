@@ -88,7 +88,7 @@ Turns the rotary stage, the turntable the subject stands on, by an angle.
 
 **"rotate the rig 10 degrees left"** becomes `rotate_stage(degrees: 10.0, direction: 'counter-clockwise')`.
 
-- It reads back: "Rotating the stage 10 degrees counter-clockwise. Confirm?"
+- It reads back: "Rotating 10 degrees counter-clockwise. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -103,11 +103,11 @@ Turns the rotary stage, the turntable the subject stands on, by an angle.
   }
   ```
 
-- When it is done: "The stage turned 10 degrees counter-clockwise."
+- When it is done: "Rotated 10 degrees counter-clockwise."
 
 **"turn the stage clockwise by 5 degrees"** becomes `rotate_stage(degrees: 5.0, direction: 'clockwise')`.
 
-- It reads back: "Rotating the stage 5 degrees clockwise. Confirm?"
+- It reads back: "Rotating 5 degrees clockwise. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -122,11 +122,11 @@ Turns the rotary stage, the turntable the subject stands on, by an angle.
   }
   ```
 
-- When it is done: "The stage turned 5 degrees clockwise."
+- When it is done: "Rotated 5 degrees clockwise."
 
 **"rotate the subject right 2.5 degrees"** becomes `rotate_stage(degrees: 2.5, direction: 'clockwise')`.
 
-- It reads back: "Rotating the stage 2.5 degrees clockwise. Confirm?"
+- It reads back: "Rotating 2.5 degrees clockwise. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -141,7 +141,7 @@ Turns the rotary stage, the turntable the subject stands on, by an angle.
   }
   ```
 
-- When it is done: "The stage turned 2.5 degrees clockwise."
+- When it is done: "Rotated 2.5 degrees clockwise."
 
 ### move_camera
 
@@ -154,7 +154,7 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
 
 **"move the camera closer by 1 mm"** becomes `move_camera(millimetres: 1.0, direction: 'closer')`.
 
-- It reads back: "Moving the camera 1 millimetre closer. Confirm?"
+- It reads back: "Moving closer 1 millimetre. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -169,11 +169,11 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
   }
   ```
 
-- When it is done: "The camera moved 1 millimetre closer."
+- When it is done: "Moved closer 1 millimetre."
 
 **"move the rail back half a millimetre"** becomes `move_camera(millimetres: 0.5, direction: 'farther')`.
 
-- It reads back: "Moving the camera 0.5 millimetres farther. Confirm?"
+- It reads back: "Moving farther 0.5 millimetres. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -188,11 +188,11 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
   }
   ```
 
-- When it is done: "The camera moved 0.5 millimetres farther."
+- When it is done: "Moved farther 0.5 millimetres."
 
 **"focus 2 millimetres further away"** becomes `move_camera(millimetres: 2.0, direction: 'farther')`.
 
-- It reads back: "Moving the camera 2 millimetres farther. Confirm?"
+- It reads back: "Moving farther 2 millimetres. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -207,7 +207,7 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
   }
   ```
 
-- When it is done: "The camera moved 2 millimetres farther."
+- When it is done: "Moved farther 2 millimetres."
 
 ### go_to_mark
 
@@ -219,7 +219,7 @@ Moves the camera back to the near or the far mark of the focus stack, to check t
 
 **"go to the near mark"** becomes `go_to_mark(mark: 'near')`.
 
-- It reads back: "Moving the camera to the near mark. Confirm?"
+- It reads back: "Going to the near mark. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -238,7 +238,7 @@ Moves the camera back to the near or the far mark of the focus stack, to check t
 
 **"move the camera back to the far end"** becomes `go_to_mark(mark: 'far')`.
 
-- It reads back: "Moving the camera to the far mark. Confirm?"
+- It reads back: "Going to the far mark. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -345,7 +345,7 @@ Stops whatever the rig is doing, at once. The rig also stops whenever the user s
 
 **"stop everything"** becomes `stop()`.
 
-- It says: "Stopping the rig."
+- It says: "Stopping."
 - It sends to rosbridge:
 
   ```json
@@ -361,7 +361,7 @@ Stops whatever the rig is doing, at once. The rig also stops whenever the user s
 
 **"halt the robot"** becomes `stop()`.
 
-- It says: "Stopping the rig."
+- It says: "Stopping."
 - It sends to rosbridge:
 
   ```json
@@ -385,7 +385,7 @@ Marks where the camera is now as the near or the far end of the focus stack: the
 
 **"mark the near end"** becomes `mark(end: 'near')`.
 
-- It reads back: "Marking this position as the near end. Confirm?"
+- It reads back: "Marking the near end. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -404,7 +404,7 @@ Marks where the camera is now as the near or the far end of the focus stack: the
 
 **"this is the far point"** becomes `mark(end: 'far')`.
 
-- It reads back: "Marking this position as the far end. Confirm?"
+- It reads back: "Marking the far end. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -423,7 +423,7 @@ Marks where the camera is now as the near or the far end of the focus stack: the
 
 **"set the near mark here"** becomes `mark(end: 'near')`.
 
-- It reads back: "Marking this position as the near end. Confirm?"
+- It reads back: "Marking the near end. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -452,7 +452,7 @@ Changes the plan of the focus stack: the shots from the near end to the far one,
 
 **"set the stack to 20 shots"** becomes `set_stack(shots: 20)`.
 
-- It reads back: "Setting the stack to 20 shots. Confirm?"
+- It reads back: "Setting 20 shots. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -480,7 +480,7 @@ Changes the plan of the focus stack: the shots from the near end to the far one,
 
 **"use 12 angles and turn 30 degrees either way"** becomes `set_stack(angles: 12, turn: 30.0)`.
 
-- It reads back: "Setting the stack to 12 angles, a turn of 30 degrees either way. Confirm?"
+- It reads back: "Setting 12 angles, a turn of plus or minus 30 degrees. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -517,7 +517,7 @@ Changes the plan of the focus stack: the shots from the near end to the far one,
 
 **"15 shots at 5 angles"** becomes `set_stack(shots: 15, angles: 5)`.
 
-- It reads back: "Setting the stack to 15 shots, 5 angles. Confirm?"
+- It reads back: "Setting 15 shots, 5 angles. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -560,7 +560,7 @@ It first reads the robot: `plan` with `get_parameters`.
 
 **"start the focus stack"** becomes `start_focus_stack()`.
 
-- It reads back: "Starting a focus stack of 10 shots at 35 angles, from minus 17 to 17 degrees: 350 pictures. Confirm?"
+- It reads back: "Stacking 10 shots at 35 angles, plus or minus 17 degrees: 350 pictures. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -579,7 +579,7 @@ It first reads the robot: `plan` with `get_parameters`.
 
 **"shoot the stack"** becomes `start_focus_stack()`.
 
-- It reads back: "Starting a focus stack of 8 shots at 1 angle: 8 pictures. Confirm?"
+- It reads back: "Stacking 8 shots at 1 angle: 8 pictures. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -659,7 +659,7 @@ Changes a setting of the camera. The value is as the camera writes it: an ISO su
 
 **"set the ISO to 400"** becomes `set_camera(setting: 'iso', value: '400')`.
 
-- It reads back: "Setting the ISO to 400. Confirm?"
+- It reads back: "Setting ISO 400. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -681,11 +681,11 @@ Changes a setting of the camera. The value is as the camera writes it: an ISO su
   }
   ```
 
-- When it is done: "The ISO is 400."
+- When it is done: "ISO is 400."
 
 **"aperture f 8"** becomes `set_camera(setting: 'aperture', value: '8')`.
 
-- It reads back: "Setting the aperture to 8. Confirm?"
+- It reads back: "Setting aperture 8. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -707,11 +707,11 @@ Changes a setting of the camera. The value is as the camera writes it: an ISO su
   }
   ```
 
-- When it is done: "The aperture is 8."
+- When it is done: "Aperture is 8."
 
 **"shutter speed one over 125"** becomes `set_camera(setting: 'shutter_speed', value: '1/125')`.
 
-- It reads back: "Setting the shutter speed to 1/125. Confirm?"
+- It reads back: "Setting shutter speed 1/125. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -733,11 +733,11 @@ Changes a setting of the camera. The value is as the camera writes it: an ISO su
   }
   ```
 
-- When it is done: "The shutter speed is 1/125."
+- When it is done: "Shutter speed is 1/125."
 
 **"white balance daylight"** becomes `set_camera(setting: 'white_balance', value: 'Daylight')`.
 
-- It reads back: "Setting the white balance to Daylight. Confirm?"
+- It reads back: "Setting white balance Daylight. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -759,7 +759,7 @@ Changes a setting of the camera. The value is as the camera writes it: an ISO su
   }
   ```
 
-- When it is done: "The white balance is Daylight."
+- When it is done: "White balance is Daylight."
 
 ### live_view
 
@@ -771,7 +771,7 @@ Starts or stops the live view of the camera.
 
 **"turn on the live view"** becomes `live_view(state: 'on')`.
 
-- It reads back: "Starting the live view. Confirm?"
+- It reads back: "Starting live view. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -787,7 +787,7 @@ Starts or stops the live view of the camera.
 
 **"live view off"** becomes `live_view(state: 'off')`.
 
-- It reads back: "Stopping the live view. Confirm?"
+- It reads back: "Stopping live view. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -813,7 +813,7 @@ It first reads the robot: `outputs` with `read_latched_topic`.
 
 **"lights on"** becomes `lights(state: 'on')`.
 
-- It reads back: "Switching the lights on. Confirm?"
+- It reads back: "Switching lights on. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -831,7 +831,7 @@ It first reads the robot: `outputs` with `read_latched_topic`.
 
 **"switch the lights off"** becomes `lights(state: 'off')`.
 
-- It reads back: "Switching the lights off. Confirm?"
+- It reads back: "Switching lights off. Confirm?"
 - It sends to rosbridge:
 
   ```json
