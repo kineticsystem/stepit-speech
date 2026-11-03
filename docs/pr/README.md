@@ -17,6 +17,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [009-no-command-on-a-fragment.md](009-no-command-on-a-fragment.md) | [#9](https://github.com/kineticsystem/stepit-speech/pull/9) No command without confirmation on a fragment |
 | [010-distance-unit.md](010-distance-unit.md) | [#10](https://github.com/kineticsystem/stepit-speech/pull/10) The camera's distance in the user's unit |
 | [011-rosbridge-first-connect.md](011-rosbridge-first-connect.md) | [#11](https://github.com/kineticsystem/stepit-speech/pull/11) Connected to rosbridge before the first command |
+| [012-shots-and-stacks.md](012-shots-and-stacks.md) | [#12](https://github.com/kineticsystem/stepit-speech/pull/12) A shot, a stack and a full stack |
 
 ## How to Write One
 

@@ -16,7 +16,8 @@
   - [stop](#stop)
   - [mark](#mark)
   - [set_stack](#set_stack)
-  - [start_focus_stack](#start_focus_stack)
+  - [start_stack](#start_stack)
+  - [start_full_stack](#start_full_stack)
   - [describe_stack](#describe_stack)
   - [take_test_shot](#take_test_shot)
   - [set_camera](#set_camera)
@@ -65,7 +66,8 @@ The voice can sleep, so that we talk to others without it hearing a command:
 | [`stop`](#stop) | Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop. | no, it runs at once |
 | [`mark`](#mark) | Marks where the camera is now as the near or the far end of the focus stack: the near end is the closest part of the subject in focus, the far end the farthest. | yes |
 | [`set_stack`](#set_stack) | Changes the plan of the focus stack: the shots from the near end to the far one, the angles of the stage, and how far the stage turns either way. Give only what changes. | yes |
-| [`start_focus_stack`](#start_focus_stack) | Starts a focus stack with the plan and the marks the rig holds. | yes |
+| [`start_stack`](#start_stack) | Shoots one focus stack, at the angle where the stage stands now, with the shots of the plan and the marks the rig holds. The stage does not turn. | yes |
+| [`start_full_stack`](#start_full_stack) | Starts the full focus stack, the 3D one: a stack at every angle of the plan, turning the stage, with the marks the rig holds. | yes |
 | [`describe_stack`](#describe_stack) | Says the plan of the focus stack and which ends are marked. Changes nothing. | no, it changes nothing |
 | [`take_test_shot`](#take_test_shot) | Takes one test picture, to check the framing and the exposure. | yes |
 | [`set_camera`](#set_camera) | Changes a setting of the camera. The value is as the camera writes it: an ISO such as 400 or Auto, a shutter speed such as 1/125 or 2, an aperture such as 8 or 5.6, an exposure compensation such as -1 or 0.3, a white balance such as Auto, Daylight or Cloudy. | yes |
@@ -591,13 +593,57 @@ Changes the plan of the focus stack: the shots from the near end to the far one,
 
 - When it is done: "The stack is set."
 
-### start_focus_stack
+### start_stack
 
-Starts a focus stack with the plan and the marks the rig holds.
+Shoots one focus stack, at the angle where the stage stands now, with the shots of the plan and the marks the rig holds. The stage does not turn.
 
 It first reads the robot: `plan` with `get_parameters`.
 
-**"start the focus stack"** becomes `start_focus_stack()`.
+**"take a stack"** becomes `start_stack()`.
+
+- It reads back: "Stacking 10 shots at this angle. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "FocusStack",
+      "payload": "{shots: 10, stage_from: 0.0, stage_to: 0.0, angles: 1}"
+    }
+  }
+  ```
+
+- When it is done: "The stack is finished, 10 pictures."
+
+**"shoot one stack here"** becomes `start_stack()`.
+
+- It reads back: "Stacking 8 shots at this angle. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "FocusStack",
+      "payload": "{shots: 8, stage_from: 0.0, stage_to: 0.0, angles: 1}"
+    }
+  }
+  ```
+
+- When it is done: "The stack is finished, 8 pictures."
+
+### start_full_stack
+
+Starts the full focus stack, the 3D one: a stack at every angle of the plan, turning the stage, with the marks the rig holds.
+
+It first reads the robot: `plan` with `get_parameters`.
+
+**"start the full stack"** becomes `start_full_stack()`.
 
 - It reads back: "Stacking 10 shots at 35 angles, plus or minus 17 degrees: 350 pictures. Confirm?"
 - It sends to rosbridge:
@@ -614,9 +660,9 @@ It first reads the robot: `plan` with `get_parameters`.
   }
   ```
 
-- When it is done: "The focus stack is finished, 350 pictures."
+- When it is done: "The full stack is finished, 350 pictures."
 
-**"shoot the stack"** becomes `start_focus_stack()`.
+**"start a stack session"** becomes `start_full_stack()`.
 
 - It reads back: "Stacking 8 shots at 1 angle: 8 pictures. Confirm?"
 - It sends to rosbridge:
@@ -633,7 +679,26 @@ It first reads the robot: `plan` with `get_parameters`.
   }
   ```
 
-- When it is done: "The focus stack is finished, 8 pictures."
+- When it is done: "The full stack is finished, 8 pictures."
+
+**"shoot the 3D stack"** becomes `start_full_stack()`.
+
+- It reads back: "Stacking 10 shots at 35 angles, plus or minus 17 degrees: 350 pictures. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "FocusStack",
+      "payload": "{shots: 10, stage_from: -17.0, stage_to: 17.0, angles: 35}"
+    }
+  }
+  ```
+
+- When it is done: "The full stack is finished, 350 pictures."
 
 ### describe_stack
 
@@ -669,6 +734,44 @@ Takes one test picture, to check the framing and the exposure.
 - When it is done: "The test shot is taken."
 
 **"take a picture"** becomes `take_test_shot()`.
+
+- It reads back: "Taking a test shot. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "TakeShot",
+      "payload": ""
+    }
+  }
+  ```
+
+- When it is done: "The test shot is taken."
+
+**"take a shot"** becomes `take_test_shot()`.
+
+- It reads back: "Taking a test shot. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "TakeShot",
+      "payload": ""
+    }
+  }
+  ```
+
+- When it is done: "The test shot is taken."
+
+**"take another shot"** becomes `take_test_shot()`.
 
 - It reads back: "Taking a test shot. Confirm?"
 - It sends to rosbridge:

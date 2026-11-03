@@ -29,7 +29,9 @@ robot:
     - "the camera", "the rail" or "the focus", when moving: the rail. Closer, forward or in is toward the subject;
       back, away, farther or out is away from it.
     - A distance is the number and the unit the user said, "mm" millimetres and "cm" centimetres: never convert it.
-    - "a stack", "a focus stack" or "a shoot": a focus stack. "A test shot", "a test picture" or "a photo": a test shot.
+    - "A shot", "another shot", "a test shot", "a test picture" or "a photo": a test shot, never a stack.
+    - "A stack" or "one stack": one focus stack, where the stage stands. "A full stack", "a stack session", "a 3D
+      stack" or "every angle": the full stack, at every angle of the plan.
     - "f 8" or "f/8" is the aperture 8; "one over 125" or "a 125th" is the shutter speed 1/125.
 
 # StepIt Commander's rosbridge, which knows every message of the rig.
@@ -239,8 +241,43 @@ commands:
       - use 12 angles and turn 30 degrees either way: {angles: 12, turn: 30}
       - 15 shots at 5 angles: {shots: 15, angles: 5}
 
-  start_focus_stack:
-    description: Starts a focus stack with the plan and the marks the rig holds.
+  start_stack:
+    description: >-
+      Shoots one focus stack, at the angle where the stage stands now, with the shots of the plan and the marks
+      the rig holds. The stage does not turn.
+    read:
+      plan:
+        get_parameters:
+          node: /stack_state
+          names: [state.shots, state.angles, state.turn, state.near, state.far]
+    let:
+      shots: "{{ reads.plan['state.shots'] | scalar | int }}"
+    require:
+      - "reads.plan['state.near'] | scalar is not none": Mark the near end first.
+      - "reads.plan['state.far'] | scalar is not none": Mark the far end first.
+    say: "Stacking {{ shots }} shots at this angle."
+    run:
+      objective:
+        # The angles of FocusStack are from where the stage stands: one angle, at 0, is here.
+        name: FocusStack
+        payload: {shots: "{{ shots }}", stage_from: 0.0, stage_to: 0.0, angles: 1}
+    started: The stack has started.
+    done: The stack is finished, {{ shots | plural('picture') }}.
+    failed: "The stack stopped{{ ': ' ~ message if message else '' }}."
+    examples:
+      - say: take a stack
+        expect: {}
+        reads:
+          plan: {state.shots: [10.0], state.angles: [35.0], state.turn: [17.0], state.near: [-12.5], state.far: [3.25]}
+      - say: shoot one stack here
+        expect: {}
+        reads:
+          plan: {state.shots: [8.0], state.angles: [1.0], state.turn: [17.0], state.near: [-12.5], state.far: [3.25]}
+
+  start_full_stack:
+    description: >-
+      Starts the full focus stack, the 3D one: a stack at every angle of the plan, turning the stage, with the
+      marks the rig holds.
     read:
       plan:
         get_parameters:
@@ -261,18 +298,22 @@ commands:
       objective:
         name: FocusStack
         payload: {shots: "{{ shots }}", stage_from: "{{ -turn if turn else 0.0 }}", stage_to: "{{ turn }}", angles: "{{ angles }}"}
-    started: The focus stack has started.
-    done: The focus stack is finished, {{ shots * angles }} pictures.
-    failed: "The focus stack stopped{{ ': ' ~ message if message else '' }}."
+    started: The full stack has started.
+    done: The full stack is finished, {{ shots * angles }} pictures.
+    failed: "The full stack stopped{{ ': ' ~ message if message else '' }}."
     examples:
-      - say: start the focus stack
+      - say: start the full stack
         expect: {}
         reads:
           plan: {state.shots: [10.0], state.angles: [35.0], state.turn: [17.0], state.near: [-12.5], state.far: [3.25]}
-      - say: shoot the stack
+      - say: start a stack session
         expect: {}
         reads:
           plan: {state.shots: [8.0], state.angles: [1.0], state.turn: [17.0], state.near: [-12.5], state.far: [3.25]}
+      - say: shoot the 3D stack
+        expect: {}
+        reads:
+          plan: {state.shots: [10.0], state.angles: [35.0], state.turn: [17.0], state.near: [-12.5], state.far: [3.25]}
 
   describe_stack:
     description: Says the plan of the focus stack and which ends are marked. Changes nothing.
@@ -312,6 +353,8 @@ commands:
     examples:
       - do a test shot: {}
       - take a picture: {}
+      - take a shot: {}
+      - take another shot: {}
 
   set_camera:
     description: >-
