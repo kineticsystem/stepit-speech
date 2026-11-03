@@ -132,6 +132,47 @@ async def test_a_lost_connection_fails_the_goal_and_the_next_call_reconnects(fak
         await client.close()
 
 
+async def until(condition, timeout_s: float = 2.0) -> None:
+    async def wait() -> None:
+        while not condition():
+            await asyncio.sleep(0.01)
+    await asyncio.wait_for(wait(), timeout_s)
+
+
+async def test_the_bridge_connects_before_the_first_command(fake_rosbridge):
+    # Over Wi-Fi, the robot's first answer after a quiet spell took more than 3 seconds.
+    client = Rosbridge(fake_rosbridge.url)
+    try:
+        client.keep_connected(interval_s=0.05)
+        await until(lambda: fake_rosbridge.sockets)
+    finally:
+        await client.close()
+
+
+async def test_kept_connected_it_reconnects_after_a_drop(fake_rosbridge):
+    client = Rosbridge(fake_rosbridge.url)
+    try:
+        client.keep_connected(interval_s=0.05)
+        await until(lambda: fake_rosbridge.sockets)
+        first = list(fake_rosbridge.sockets)
+        for socket in first:
+            await socket.close()
+        await until(lambda: any(socket not in first for socket in fake_rosbridge.sockets))
+    finally:
+        await client.close()
+
+
+async def test_kept_connected_a_missing_rosbridge_is_reported_once(caplog):
+    client = Rosbridge("ws://127.0.0.1:9", connect_timeout_s=0.2)
+    try:
+        client.keep_connected(interval_s=0.01)
+        await asyncio.sleep(0.3)
+    finally:
+        await client.close()
+    reports = [record for record in caplog.records if "trying again" in record.getMessage()]
+    assert len(reports) == 1
+
+
 # ── The robot over rosbridge ────────────────────────────────────────────────
 
 OBJECTIVE = Call(name="objective", kind="action", target="/commander/execute_objective",

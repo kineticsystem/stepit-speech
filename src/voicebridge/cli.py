@@ -118,6 +118,7 @@ async def _serve(catalogue: Catalogue, args: argparse.Namespace) -> int:
                                           len(catalogue.commands), rosbridge.url)
     try:
         await proxy.start()
+        rosbridge.keep_connected()
         await server.serve_forever()
     except asyncio.CancelledError:
         pass
