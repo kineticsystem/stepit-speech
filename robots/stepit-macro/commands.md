@@ -59,7 +59,7 @@ The voice can sleep, so that we talk to others without it hearing a command:
 | Command | What it does | Confirmed |
 |---|---|---|
 | [`rotate_stage`](#rotate_stage) | Turns the rotary stage, the turntable the subject stands on, by an angle. | yes |
-| [`move_camera`](#move_camera) | Moves the camera along the rail, closer to the subject or farther from it, by a distance. | yes |
+| [`move_camera`](#move_camera) | Moves the camera along the rail, closer to the subject or farther from it, by a distance in the unit the user said: millimetres or centimetres, never converted. | yes |
 | [`go_to_mark`](#go_to_mark) | Moves the camera back to the near or the far mark of the focus stack, to check the focus there. | yes |
 | [`manual_drive`](#manual_drive) | Enables teleoperation (on), so that the rig is driven by hand, with the gamepad or the sliders, or disables it (off), to take the rig back for the commands. | yes |
 | [`stop`](#stop) | Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop. | no, it runs at once |
@@ -145,14 +145,15 @@ Turns the rotary stage, the turntable the subject stands on, by an angle.
 
 ### move_camera
 
-Moves the camera along the rail, closer to the subject or farther from it, by a distance.
+Moves the camera along the rail, closer to the subject or farther from it, by a distance in the unit the user said: millimetres or centimetres, never converted.
 
 | Parameter | Values | Description |
 |---|---|---|
-| `millimetres` | 0.01 to 50 | how far to move, in millimetres |
+| `distance` | 0.01 to 50 | how far to move, the number the user said |
+| `unit` | `millimetres`, `centimetres` |  |
 | `direction` | `closer`, `farther` |  |
 
-**"move the camera closer by 1 mm"** becomes `move_camera(millimetres: 1.0, direction: 'closer')`.
+**"move the camera closer by 1 mm"** becomes `move_camera(distance: 1.0, unit: 'millimetres', direction: 'closer')`.
 
 - It reads back: "Moving closer 1 millimetre. Confirm?"
 - It sends to rosbridge:
@@ -171,7 +172,26 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
 
 - When it is done: "Moved closer 1 millimetre."
 
-**"move the rail back half a millimetre"** becomes `move_camera(millimetres: 0.5, direction: 'farther')`.
+**"move the camera back one centimetre"** becomes `move_camera(distance: 1.0, unit: 'centimetres', direction: 'farther')`.
+
+- It reads back: "Moving farther 1 centimetre. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "MoveRailBy",
+      "payload": "{mm: 10.0}"
+    }
+  }
+  ```
+
+- When it is done: "Moved farther 1 centimetre."
+
+**"move the rail back half a millimetre"** becomes `move_camera(distance: 0.5, unit: 'millimetres', direction: 'farther')`.
 
 - It reads back: "Moving farther 0.5 millimetres. Confirm?"
 - It sends to rosbridge:
@@ -190,9 +210,9 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
 
 - When it is done: "Moved farther 0.5 millimetres."
 
-**"focus 2 millimetres further away"** becomes `move_camera(millimetres: 2.0, direction: 'farther')`.
+**"focus 2 centimetres further away"** becomes `move_camera(distance: 2.0, unit: 'centimetres', direction: 'farther')`.
 
-- It reads back: "Moving farther 2 millimetres. Confirm?"
+- It reads back: "Moving farther 2 centimetres. Confirm?"
 - It sends to rosbridge:
 
   ```json
@@ -202,12 +222,31 @@ Moves the camera along the rail, closer to the subject or farther from it, by a 
     "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
     "args": {
       "target_tree": "MoveRailBy",
-      "payload": "{mm: 2.0}"
+      "payload": "{mm: 20.0}"
     }
   }
   ```
 
-- When it is done: "Moved farther 2 millimetres."
+- When it is done: "Moved farther 2 centimetres."
+
+**"move closer 1.5 cm"** becomes `move_camera(distance: 1.5, unit: 'centimetres', direction: 'closer')`.
+
+- It reads back: "Moving closer 1.5 centimetres. Confirm?"
+- It sends to rosbridge:
+
+  ```json
+  {
+    "op": "send_action_goal",
+    "action": "/commander/execute_objective",
+    "action_type": "btcpp_ros2_interfaces/action/ExecuteTree",
+    "args": {
+      "target_tree": "MoveRailBy",
+      "payload": "{mm: -15.0}"
+    }
+  }
+  ```
+
+- When it is done: "Moved closer 1.5 centimetres."
 
 ### go_to_mark
 
