@@ -26,9 +26,11 @@ never seem to run a command that the bridge has not read back:
    model never sees the bridge's sentences in its history; a turn of yes, no
    or stop never reaches it, as the bridge answers those; and a reply that
    asks to confirm, or says the robot is acting with a verb of the robot's
-   own sentences ("moving", "taking"), is asked again with the commands only,
-   so that the schema leaves it no reply. If it still gives none, e.g. on a
-   server that ignores the schema, the user hears ``SAY_AGAIN``.
+   own sentences ("moving", "taking"), is asked again once, told why: it may
+   call the command, or reply without pretending. It is never forced to call
+   one: forced, it picked one anyway, ``stop`` or ``start_stack`` on a turn
+   that asked for none. If the second answer pretends too, the user hears
+   ``SAY_AGAIN``.
 4. **No follow-up.** After the bridge answers a command, the speech server
    asks the model to go on; the bridge speaks next, so the proxy answers with
    nothing, except after a rejection, which the model explains.
@@ -69,7 +71,7 @@ from voicebridge.llmproxy.chat import (
     without_sleep,
     without_summary,
 )
-from voicebridge.llmproxy.decision import commands_only, settle, structured
+from voicebridge.llmproxy.decision import settle, structured
 from voicebridge.llmproxy.guard import Guard, pretends
 from voicebridge.safety.phrases import Meaning, words
 
@@ -77,6 +79,13 @@ log = logging.getLogger("voicebridge.llmproxy")
 
 # Said instead of a reply that pretended to run a command the model did not call.
 SAY_AGAIN = "Sorry, I did not get that as a command. Please say it again."
+
+# Told the model, with its pretending reply, when it is asked again.
+CORRECTION = (
+    "Your answer {reply!r} says that the robot is acting, or asks to confirm, but you called no command, so "
+    "nothing happens. Only a command makes the robot act, and only the system asks to confirm. If the user asked "
+    "for an action, answer with its command. Otherwise answer with a reply that does not say the robot is acting."
+)
 
 # Headers that belong to one hop, never copied from one connection to the next.
 _HOP = {"connection", "content-length", "content-encoding", "transfer-encoding", "keep-alive", "host"}
@@ -172,14 +181,14 @@ class LlmProxy:
             return answer
         content, calls = settle(message(answer))
         if not calls and pretends(content, self._guard):
-            log.warning("The LLM said %r without calling a command: asked again, with commands only", content)
-            again = await self._ask(commands_only(upstream_body), request.headers)
+            log.warning("The LLM said %r without calling a command: asked again, told why", content)
+            again = await self._ask(corrected(upstream_body, content), request.headers)
             if isinstance(again, web.Response):
                 return again
             answer = again
             content, calls = settle(message(answer))
-            if not calls:
-                log.warning("The LLM still called no command: %r", content)
+            if not calls and pretends(content, self._guard):
+                log.warning("The LLM pretended again: %r", content)
                 content = SAY_AGAIN
         if calls:
             log.info("The LLM called %s", ", ".join(
@@ -228,6 +237,14 @@ class LlmProxy:
                 await response.write(data)
             await response.write_eof()
             return response
+
+
+def corrected(request: Mapping[str, Any], reply: str) -> dict[str, Any]:
+    """The request again, with the model's pretending reply and why it was refused: the reply is still allowed."""
+    messages = [*request.get("messages", []), {"role": "assistant", "content": reply},
+                # As the user's turn, from the system: a chat template may refuse a system message after the first.
+                {"role": "user", "content": "[System] " + CORRECTION.format(reply=reply)}]
+    return {**request, "messages": messages}
 
 
 def _forwarded(headers: Mapping[str, str]) -> dict[str, str]:

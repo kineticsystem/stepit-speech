@@ -19,6 +19,7 @@ Each pull request has a notes file here. It keeps what the pull request does not
 | [011-rosbridge-first-connect.md](011-rosbridge-first-connect.md) | [#11](https://github.com/kineticsystem/stepit-speech/pull/11) Connected to rosbridge before the first command |
 | [012-shots-and-stacks.md](012-shots-and-stacks.md) | [#12](https://github.com/kineticsystem/stepit-speech/pull/12) A shot, a stack and a full stack |
 | [013-marks-by-camera.md](013-marks-by-camera.md) | [#13](https://github.com/kineticsystem/stepit-speech/pull/13) The marks named by where the camera is |
+| [014-no-forced-command.md](014-no-forced-command.md) | [#14](https://github.com/kineticsystem/stepit-speech/pull/14) No forced command |
 
 ## How to Write One
 

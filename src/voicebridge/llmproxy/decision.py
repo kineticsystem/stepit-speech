@@ -87,14 +87,6 @@ def structured(body: Mapping[str, Any]) -> dict[str, Any] | None:
     return request
 
 
-def commands_only(request: Mapping[str, Any]) -> dict[str, Any]:
-    """The structured request without the reply: the schema leaves the model a command only."""
-    schema = request["response_format"]["json_schema"]
-    choices = [choice for choice in schema["schema"]["oneOf"] if REPLY not in choice["properties"]]
-    return {**request, "response_format": {**request["response_format"],
-                                           "json_schema": {**schema, "schema": {"oneOf": choices}}}}
-
-
 def _decision(content: str) -> Mapping[str, Any] | None:
     try:
         decision = json.loads(content)
