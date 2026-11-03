@@ -22,7 +22,7 @@ from voicebridge.llmproxy.chat import (
     without_sleep,
     without_summary,
 )
-from voicebridge.llmproxy.decision import REPLY, commands_only, settle, structured
+from voicebridge.llmproxy.decision import REPLY, settle, structured
 from voicebridge.llmproxy.guard import Guard, asks_to_confirm, pretends
 from voicebridge.llmproxy.proxy import SAY_AGAIN, LlmProxy
 from voicebridge.safety.phrases import PhraseMatcher, words
@@ -81,8 +81,6 @@ def test_a_turn_with_tools_asks_for_one_json_decision():
     assert choices[1]["properties"][REPLY]["maxLength"] > 0
     # The model learns the commands from its instructions, as it no longer gets tools.
     assert "- move_camera: Moves the camera." in request["messages"][0]["content"]
-    assert [list(c["properties"]) for c in commands_only(request)["response_format"]["json_schema"]["schema"][
-        "oneOf"]] == [["command", "arguments"]]
 
 
 def test_a_turn_without_tools_or_with_tools_off_is_left_alone():
@@ -249,15 +247,26 @@ def test_a_reply_that_asks_to_confirm_is_caught():
     assert not asks_to_confirm("How many millimetres?", "Confirm?")
 
 
-async def test_an_imitated_read_back_is_asked_again_with_commands_only(proxied):
+async def test_an_imitated_read_back_is_asked_again_told_why_and_never_forced(proxied):
     llm, client, url = proxied
     llm.answers = [decision(reply="Moving the camera 2 mm closer. Confirm?"),
                    decision(command="move_camera", arguments={"millimetres": 2})]
     events = await stream(client, url, {"model": "m", "tools": [MOVE], "messages": [system("Hi.")]})
-    again = llm.requests[1]["response_format"]["json_schema"]["schema"]["oneOf"]
-    assert [choice["properties"]["command"]["const"] for choice in again] == ["move_camera"]
+    again = llm.requests[1]
+    # The reply is still allowed: forced, the model called stop or start_stack on a turn that asked for neither.
+    assert REPLY in again["response_format"]["json_schema"]["schema"]["oneOf"][-1]["properties"]
+    assert again["messages"][-2] == {"role": "assistant", "content": "Moving the camera 2 mm closer. Confirm?"}
+    assert again["messages"][-1]["role"] == "user" and "called no command" in again["messages"][-1]["content"]
     assert streamed_text(events) == ""
     assert any(e["choices"] and e["choices"][0]["delta"].get("tool_calls") for e in events)
+
+
+async def test_asked_again_a_reply_that_no_longer_pretends_is_said(proxied):
+    llm, client, url = proxied
+    llm.answers = [decision(reply="Moving the camera now."), decision(reply="How far, in millimetres?")]
+    events = await stream(client, url, {"model": "m", "tools": [MOVE], "messages": [system("Hi.")]})
+    assert len(llm.requests) == 2
+    assert streamed_text(events) == "How far, in millimetres?"
 
 
 async def test_an_imitated_read_back_is_never_said(proxied):
@@ -274,6 +283,24 @@ def test_the_verbs_of_the_robot_come_from_its_sentences(stepit_macro):
     assert pretends("Taking a test shot now.", guard)
     assert not pretends("How many millimetres closer?", guard)
     assert not pretends("The rail goes from 0 to 300 millimetres.", guard)
+
+
+@pytest.mark.parametrize("reply", [
+    "Moving closer 2 centimetres.", "The stack is running.", "I'm switching the lights on.",
+    "Okay. Setting the ISO to 400.", "It is now taking a picture.", "Done.",
+])
+def test_a_verb_of_the_robot_that_acts_pretends(stepit_macro, reply):
+    assert pretends(reply, Guard.of(stepit_macro))
+
+
+@pytest.mark.parametrize("reply", [
+    # Said on the rig, and asked again with commands only: the model then picked report_status.
+    "What setting do you want to change?",
+    "I didn't say it was overexposed. If the picture looks too bright, I can change a setting.",
+    "Which setting, and to what value?",
+])
+def test_the_same_word_as_a_noun_does_not_pretend(stepit_macro, reply):
+    assert not pretends(reply, Guard.of(stepit_macro))
 
 
 async def test_a_pretended_action_is_asked_again_with_commands_only(proxied):

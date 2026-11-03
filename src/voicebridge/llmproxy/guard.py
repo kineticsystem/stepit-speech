@@ -6,6 +6,11 @@ A model that has heard the bridge read commands back starts doing it itself,
 in a reply, without calling the command: "Moving the camera closer. Confirm?",
 and the user's yes confirms nothing. ``pretends`` finds such a reply, with the
 robot's confirmation question and the verbs of its own read-backs.
+
+A verb counts only where it says that something acts: at the start of a
+sentence, "Moving the camera closer.", or after a word such as "is" or "now",
+"The stack is running.". The same word as a noun, "which setting?", "I can
+change a setting", is a question or an offer, not an action.
 """
 
 from __future__ import annotations
@@ -59,9 +64,27 @@ _SLEEPING = frozenset({"sleep", "sleeping", "asleep", "goodnight", "night"})
 _TEMPLATE_CODE = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
 
 
+# Words after which a verb of the robot says that it acts: "is moving", "now taking", "I'm switching".
+_ACTS_AFTER = frozenset({"is", "are", "am", "i'm", "it's", "we're", "now", "currently", "already", "be", "been"})
+
+
+def _acting(text: str, verbs: frozenset[str]) -> bool:
+    """Whether a verb of the robot says that it acts: first in a sentence, or after "is", "now" and the like."""
+    for sentence in re.split(r"[.!?;:]+", text):
+        said = words(sentence)
+        for i, word in enumerate(said):
+            if word in verbs and (i == 0 or said[i - 1] in _ACTS_AFTER):
+                return True
+    return False
+
+
 def pretends(text: str, guard: Guard) -> bool:
     """Whether a reply asks to confirm a command or says the robot is acting, as only the bridge may."""
-    return asks_to_confirm(text, guard.prompt) or bool(set(words(text)) & guard.verbs)
+    if asks_to_confirm(text, guard.prompt):
+        return True
+    # The words of any action, "done", and of falling asleep count anywhere; the robot's verbs where they act.
+    anywhere = (_ACTING | _SLEEPING) & guard.verbs
+    return bool(set(words(text)) & anywhere) or _acting(text, guard.verbs - anywhere)
 
 
 def asks_to_confirm(text: str, prompt: str = "") -> bool:
