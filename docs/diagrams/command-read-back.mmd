@@ -56,7 +56,7 @@ sequenceDiagram
     Bridge ->> Speech: function_call_output<br/>"Not done yet..."
     Bridge ->> Speech: response.create, the<br/>read-back in its instructions
     Speech ->> Proxy: chat completion,<br/>with the read-back
-    Proxy -->> Speech: "Rotating the stage 10 degrees<br/>counter-clockwise. Confirm?"
+    Proxy -->> Speech: "Rotating 10 degrees<br/>counter-clockwise. Confirm?"
     Speech ->> Browser: the read-back, spoken
     Speech ->> Bridge: response.output_audio<br/>_transcript.done
     Note over Bridge: the same sentence: armed

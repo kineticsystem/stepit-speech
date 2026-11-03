@@ -115,9 +115,21 @@ services:
       - "false"
       - --qwen3_tts_ggml_quantization
       - Q8_0
-      # A short "yes" has 200 to 350 ms of voice: the default, 384, threw most of ours away.
+      # Without an instruction the voice changes from sentence to sentence, at times breathy or
+      # whispered; guessed per sentence, the language gave a short one the wrong intonation.
+      - --qwen3_tts_language
+      - english
+      - --qwen3_tts_instruct
+      - "Speak in a calm, clear and neutral tone, like a professional assistant, at a normal speaking volume. Do not whisper and do not sound excited."
+      # A short "yes" has 200 to 350 ms of voice: the default, 384, threw most of ours away,
+      # and 192 still lost about one in five through the phone in loudspeaker mode, where the
+      # detector measured 96 to 160 ms of it.
       - --min_speech_ms
-      - "192"
+      - "96"
+      # A pause in the middle of a command ended the turn at 0.5, sending "Can you" or
+      # "move it uh one" on their own: higher waits through the pause.
+      - --smart_turn_threshold
+      - "0.7"
     depends_on:
       bridge:
         condition: service_started

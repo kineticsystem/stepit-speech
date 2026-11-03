@@ -36,7 +36,7 @@ async def objective(stepit_macro, name, arguments, reads=None):
 
 async def test_left_is_counter_clockwise_and_negative(stepit_macro):
     sentence, goal = await objective(stepit_macro, "rotate_stage", {"degrees": 10, "direction": "counter-clockwise"})
-    assert sentence == "Rotating the stage 10 degrees counter-clockwise."
+    assert sentence == "Rotating 10 degrees counter-clockwise."
     assert goal == {"target_tree": "RotateStageBy", "payload": "{deg: -10.0}"}
     _, goal = await objective(stepit_macro, "rotate_stage", {"degrees": 10, "direction": "clockwise"})
     assert goal["payload"] == "{deg: 10.0}"
@@ -44,7 +44,7 @@ async def test_left_is_counter_clockwise_and_negative(stepit_macro):
 
 async def test_closer_is_toward_the_subject_and_negative(stepit_macro):
     sentence, goal = await objective(stepit_macro, "move_camera", {"millimetres": 1, "direction": "closer"})
-    assert sentence == "Moving the camera 1 millimetre closer."
+    assert sentence == "Moving closer 1 millimetre."
     assert goal == {"target_tree": "MoveRailBy", "payload": "{mm: -1.0}"}
 
 
@@ -63,7 +63,7 @@ async def test_a_focus_stack_reads_the_plan_of_the_rig(stepit_macro):
     plan = {"state.shots": [10.0], "state.angles": [35.0], "state.turn": [17.0], "state.near": [-1.0],
             "state.far": [2.0]}
     sentence, goal = await objective(stepit_macro, "start_focus_stack", {}, reads={"plan": plan})
-    assert sentence == "Starting a focus stack of 10 shots at 35 angles, from minus 17 to 17 degrees: 350 pictures."
+    assert sentence == "Stacking 10 shots at 35 angles, plus or minus 17 degrees: 350 pictures."
     assert goal == {"target_tree": "FocusStack",
                     "payload": "{shots: 10, stage_from: -17.0, stage_to: 17.0, angles: 35}"}
 

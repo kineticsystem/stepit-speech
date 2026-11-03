@@ -68,7 +68,7 @@ In plain words, this is what happens when we say "rotate the rig 10 degrees left
 1. The speech server hears us, transcribes us, and gives the text to its LLM, with the robot's commands as tools: the bridge added them to the session when the browser connected. Its LLM is the bridge's proxy, which asks the real LLM for one JSON object: a command, or a reply.
 2. The LLM answers `{"command": "rotate_stage", "arguments": {"degrees": 10, "direction": "counter-clockwise"}}`, and the proxy hands it to the speech server as a call of the tool `rotate_stage`.
 3. The bridge catches the call, so the browser never sees it, and checks the values: 10 is between 0.1 and 360, counter-clockwise is one of the two directions.
-4. From the same values, it writes the sentence to read back, "Rotating the stage 10 degrees counter-clockwise. Confirm?", and the request it will send, the objective `RotateStageBy` with `{deg: -10.0}`.
+4. From the same values, it writes the sentence to read back, "Rotating 10 degrees counter-clockwise. Confirm?", and the request it will send, the objective `RotateStageBy` with `{deg: -10.0}`.
 5. It asks the speech server to say that sentence. The speech server asks its LLM for the words, and the proxy answers with the sentence itself, without the model. The bridge still compares what the voice said with the sentence: only when they are the same is the command **armed**, ready, waiting for a yes, for 20 seconds.
 6. We say "yes". The bridge reads our transcript itself and finds only confirming words. The LLM never hears the yes: the proxy answers that turn with nothing, and the bridge cancels the server's reply to it.
 7. The bridge sends the goal to the commander through rosbridge and waits for its end.
@@ -124,7 +124,7 @@ Every way out of `Armed` goes back to `Idle`, so a command is confirmed once at 
 | The STT mishears "fifteen" as "fifty". | The read-back says "50 degrees": we hear it and say no. |
 | The LLM picks the wrong direction, or guesses one we did not say. | The read-back says the direction in words: we hear it and say no. Measured on Qwen3.8-27B: "turn the table 20 degrees" became clockwise. |
 | The LLM asks for 400 degrees, or 2 metres. | The limits of the parameter: the command is refused before the read-back. |
-| The LLM calls a tool while we only chat. | The read-back: an unexpected "Rotating the stage..." is answered with no, or with anything else. |
+| The LLM calls a tool while we only chat. | The read-back: an unexpected "Rotating..." is answered with no, or with anything else. |
 | The LLM answers "I'll switch the lights on for you" and calls nothing. | The JSON schema: an answer is a command or a reply. A reply with a verb of the robot's read-backs, e.g. "switching", is asked again with commands only; if no command comes, the voice says "Sorry, I did not get that as a command." |
 | The LLM asks "Switching the lights on. Confirm?" itself, and our yes confirms nothing. | The proxy refuses a reply that asks to confirm, and the model never sees the bridge's read-backs to copy. A yes with nothing waiting is answered by the bridge. |
 | The model repeats a sentence without end. | A reply is at most 200 characters, and an answer at most 300 tokens. |

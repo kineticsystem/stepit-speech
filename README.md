@@ -27,7 +27,7 @@
 
 ## Introduction
 
-StepIt Speech drives a ROS 2 robot by voice. We say "move the camera 2 millimetres closer"; the robot answers "Moving the camera 2 millimetres closer. Confirm?"; we say "yes"; and the camera moves.
+StepIt Speech drives a ROS 2 robot by voice. We say "move the camera 2 millimetres closer"; the robot answers "Moving closer 2 millimetres. Confirm?"; we say "yes"; and the camera moves.
 
 It is built on [Hugging Face Speech-to-Speech](https://github.com/huggingface/speech-to-speech), which listens, transcribes, asks an LLM and speaks the answer, and on [rosbridge](https://github.com/RobotWebTools/rosbridge_suite), which lets a program reach ROS 2 over a WebSocket. Its first robot is [StepIt Macro](https://github.com/kineticsystem/stepit-macro), the focus stacking rig, but it knows nothing of it: everything about a robot is in one YAML file, its **robot file**.
 
@@ -183,7 +183,7 @@ uv run uvicorn --app-dir demo server:app --port 7860
 Open <http://localhost:7860>, press the button and allow the microphone. The voice says "Ready.", the `greeting` of the robot file. Then:
 
 1. "Move the camera 2 millimetres closer."
-2. The voice answers: "Moving the camera 2 millimetres closer. Confirm?"
+2. The voice answers: "Moving closer 2 millimetres. Confirm?"
 3. "Yes." The rail moves, and the voice says "The camera moved 2 millimetres closer."
 
 Say "no", or anything else, to cancel; say "stop" at any time to stop the rig. When a value is missing, e.g. "move the camera closer", the voice asks for it: "How many millimetres closer?". Watch the rig in StepIt UI, <http://localhost:8070>.
@@ -221,12 +221,12 @@ rotate_stage:
   parameters:
     degrees: {type: number, min: 0.1, max: 360, description: "how far to turn, in degrees"}
     direction: [clockwise, counter-clockwise]
-  say: Rotating the stage {{ degrees | plural('degree') }} {{ direction }}.
+  say: Rotating {{ degrees | plural('degree') }} {{ direction }}.
   run:
     objective:
       name: RotateStageBy
       payload: {deg: "{{ -degrees if direction == 'counter-clockwise' else degrees }}"}
-  done: The stage turned {{ degrees | plural('degree') }} {{ direction }}.
+  done: Rotated {{ degrees | plural('degree') }} {{ direction }}.
   examples:
     - rotate the rig 10 degrees left: {degrees: 10, direction: counter-clockwise}
 ```

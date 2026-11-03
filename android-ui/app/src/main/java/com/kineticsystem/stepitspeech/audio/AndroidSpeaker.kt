@@ -3,8 +3,11 @@
 
 package com.kineticsystem.stepitspeech.audio
 
+import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import com.kineticsystem.stepitspeech.protocol.Realtime
 import com.kineticsystem.stepitspeech.voice.Speaker
@@ -13,13 +16,15 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The voice, through `AudioTrack`, as the audio of a call: it goes to the
- * headset when one is plugged in, and the echo canceller knows it.
+ * headset when one is plugged in, and the echo canceller knows it. With a USB
+ * microphone ([UsbMicrophone]) there is no call: it is media, on the loudspeaker.
  *
  * The voice arrives in pieces faster than it plays: a thread of its own writes
  * them, in slices of 20 ms, so that [interrupt] cuts it within 20 ms, not at the
  * end of a piece of a second or more.
  */
-class AndroidSpeaker : Speaker {
+class AndroidSpeaker(context: Context) : Speaker {
+    private val audio = context.getSystemService(AudioManager::class.java)
     private val queue = LinkedBlockingQueue<ByteArray>()
     private var track: AudioTrack? = null
     private var thread: Thread? = null
@@ -40,7 +45,10 @@ class AndroidSpeaker : Speaker {
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
             .build()
         val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setUsage(
+                if (UsbMicrophone.find(audio) != null) AudioAttributes.USAGE_MEDIA
+                else AudioAttributes.USAGE_VOICE_COMMUNICATION,
+            )
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
         val minimum = AudioTrack.getMinBufferSize(Realtime.SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO,
@@ -51,6 +59,11 @@ class AndroidSpeaker : Speaker {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(minimum * 2)
             .build()
+        if (UsbMicrophone.find(audio) != null) {
+            // As media, Android would play it on the USB receiver's earphone socket, if it has one.
+            track.preferredDevice = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+        }
         this.track = track
         running = true
         track.play()

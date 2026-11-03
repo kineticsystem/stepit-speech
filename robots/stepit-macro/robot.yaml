@@ -105,13 +105,14 @@ commands:
     parameters:
       degrees: {type: number, min: 0.1, max: 360, description: "how far to turn, in degrees"}
       direction: [clockwise, counter-clockwise]
-    say: Rotating the stage {{ degrees | plural('degree') }} {{ direction }}.
+    # The rig has one stage: "Rotating" is enough.
+    say: Rotating {{ degrees | plural('degree') }} {{ direction }}.
     run:
       objective:
         name: RotateStageBy
         # Counter-clockwise is negative on the rig.
         payload: {deg: "{{ -degrees if direction == 'counter-clockwise' else degrees }}"}
-    done: The stage turned {{ degrees | plural('degree') }} {{ direction }}.
+    done: Rotated {{ degrees | plural('degree') }} {{ direction }}.
     examples:
       - rotate the rig 10 degrees left: {degrees: 10, direction: counter-clockwise}
       - turn the stage clockwise by 5 degrees: {degrees: 5, direction: clockwise}
@@ -122,13 +123,14 @@ commands:
     parameters:
       millimetres: {type: number, min: 0.01, max: 50, description: "how far to move, in millimetres"}
       direction: [closer, farther]
-    say: Moving the camera {{ millimetres | plural('millimetre') }} {{ direction }}.
+    # Only the camera moves along the rail: "Moving" is enough.
+    say: Moving {{ direction }} {{ millimetres | plural('millimetre') }}.
     run:
       objective:
         name: MoveRailBy
         # Toward the subject is negative on the rig.
         payload: {mm: "{{ -millimetres if direction == 'closer' else millimetres }}"}
-    done: The camera moved {{ millimetres | plural('millimetre') }} {{ direction }}.
+    done: Moved {{ direction }} {{ millimetres | plural('millimetre') }}.
     examples:
       - move the camera closer by 1 mm: {millimetres: 1, direction: closer}
       - move the rail back half a millimetre: {millimetres: 0.5, direction: farther}
@@ -138,7 +140,7 @@ commands:
     description: Moves the camera back to the near or the far mark of the focus stack, to check the focus there.
     parameters:
       mark: [near, far]
-    say: Moving the camera to the {{ mark }} mark.
+    say: Going to the {{ mark }} mark.
     run:
       objective:
         name: MoveRailToMark
@@ -168,7 +170,7 @@ commands:
 
   stop:
     description: Stops whatever the rig is doing, at once. The rig also stops whenever the user says stop.
-    say: Stopping the rig.
+    say: Stopping.
     confirm: false
     run:
       cancel_objectives: {}
@@ -185,7 +187,7 @@ commands:
       closest part of the subject in focus, the far end the farthest.
     parameters:
       end: [near, far]
-    say: Marking this position as the {{ end }} end.
+    say: Marking the {{ end }} end.
     run:
       objective:
         name: "{{ 'MarkNear' if end == 'near' else 'MarkFar' }}"
@@ -207,10 +209,10 @@ commands:
     require:
       - "shots is not none or angles is not none or turn is not none": Say what to change, the shots, the angles or the turn.
     say: >-
-      Setting the stack to
+      Setting
       {%- if shots is not none %} {{ shots }} shots{% endif %}
       {%- if angles is not none %}{% if shots is not none %},{% endif %} {{ angles }} angles{% endif %}
-      {%- if turn is not none %}{% if shots is not none or angles is not none %},{% endif %} a turn of {{ turn | plural('degree') }} either way{% endif %}.
+      {%- if turn is not none %}{% if shots is not none or angles is not none %},{% endif %} a turn of plus or minus {{ turn | plural('degree') }}{% endif %}.
     run:
       set_parameters:
         node: /stack_state
@@ -241,8 +243,8 @@ commands:
       - "reads.plan['state.near'] | scalar is not none": Mark the near end first.
       - "reads.plan['state.far'] | scalar is not none": Mark the far end first.
     say: >-
-      Starting a focus stack of {{ shots }} shots at {{ angles }} {{ 'angle' if angles == 1 else 'angles' }}
-      {%- if angles > 1 %}, from minus {{ turn }} to {{ turn }} degrees{% endif %}: {{ shots * angles }} pictures.
+      Stacking {{ shots }} shots at {{ angles }} {{ 'angle' if angles == 1 else 'angles' }}
+      {%- if angles > 1 %}, plus or minus {{ turn | plural('degree') }}{% endif %}: {{ shots * angles }} pictures.
     run:
       objective:
         name: FocusStack
@@ -308,9 +310,9 @@ commands:
       setting: [iso, shutter_speed, aperture, exposure_compensation, white_balance]
       value: {type: string, description: "the value as the camera writes it, e.g. 400, 1/125, 5.6 or Daylight"}
     let:
-      spoken: "{{ {'iso': 'the ISO', 'shutter_speed': 'the shutter speed', 'aperture': 'the aperture',
-                  'exposure_compensation': 'the exposure compensation', 'white_balance': 'the white balance'}[setting] }}"
-    say: Setting {{ spoken }} to {{ value }}.
+      spoken: "{{ {'iso': 'ISO', 'shutter_speed': 'shutter speed', 'aperture': 'aperture',
+                  'exposure_compensation': 'exposure compensation', 'white_balance': 'white balance'}[setting] }}"
+    say: Setting {{ spoken }} {{ value }}.
     run:
       set_parameters:
         node: /camera
@@ -327,7 +329,7 @@ commands:
     description: Starts or stops the live view of the camera.
     parameters:
       state: [on, off]
-    say: "{{ 'Starting' if state == 'on' else 'Stopping' }} the live view."
+    say: "{{ 'Starting' if state == 'on' else 'Stopping' }} live view."
     run:
       trigger:
         service: "{{ '/camera/start_streaming' if state == 'on' else '/camera/stop_streaming' }}"
@@ -343,7 +345,7 @@ commands:
     read:
       outputs:
         read_latched_topic: {topic: /freezer/outputs, type: freezer_msgs/msg/Outputs}
-    say: Switching the lights {{ state }}.
+    say: Switching lights {{ state }}.
     run:
       set_freezer_outputs:
         # The lights close both lines of jack OUT1: bits 0 and 1, the mask 3. The other outputs stay as they are.
